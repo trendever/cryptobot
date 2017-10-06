@@ -62,6 +62,12 @@
 			"branch": "master"
 		},
 		{
+			"importpath": "github.com/fatih/color",
+			"repository": "https://github.com/fatih/color",
+			"revision": "5df930a27be2502f99b292b7cc09ebad4d0891f4",
+			"branch": "master"
+		},
+		{
 			"importpath": "github.com/fsnotify/fsnotify",
 			"repository": "https://github.com/fsnotify/fsnotify",
 			"revision": "4da3e2cfbabc9f751898f250b49f2439785783a1",
@@ -141,6 +147,18 @@
 			"importpath": "github.com/magiconair/properties",
 			"repository": "https://github.com/magiconair/properties",
 			"revision": "8d7837e64d3c1ee4e54a880c5a920ab4316fc90a",
+			"branch": "master"
+		},
+		{
+			"importpath": "github.com/mattn/go-colorable",
+			"repository": "https://github.com/mattn/go-colorable",
+			"revision": "ad5389df28cdac544c99bd7b9161a0b5b6ca9d1b",
+			"branch": "master"
+		},
+		{
+			"importpath": "github.com/mattn/go-isatty",
+			"repository": "https://github.com/mattn/go-isatty",
+			"revision": "a5cdd64afdee435007ee3e9f6ed4684af949d568",
 			"branch": "master"
 		},
 		{
@@ -246,6 +264,13 @@
 			"revision": "0a9397675ba34b2845f758fe3cd68828369c6517",
 			"branch": "master",
 			"path": "/context"
+		},
+		{
+			"importpath": "golang.org/x/net/proxy",
+			"repository": "https://go.googlesource.com/net",
+			"revision": "a04bdaca5b32abe1c069418fb7088ae607de5bd0",
+			"branch": "master",
+			"path": "/proxy"
 		},
 		{
 			"importpath": "golang.org/x/sys/unix",
