@@ -180,6 +180,12 @@
 			"branch": "master"
 		},
 		{
+			"importpath": "github.com/shopspring/decimal",
+			"repository": "https://github.com/shopspring/decimal",
+			"revision": "aed1bfe463fa3c9cc268d60dcc1491db613bff7e",
+			"branch": "master"
+		},
+		{
 			"importpath": "github.com/spf13/afero",
 			"repository": "https://github.com/spf13/afero",
 			"revision": "ee1bd8ee15a1306d1f9201acc41ef39cd9f99a1b",
