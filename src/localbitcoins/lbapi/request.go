@@ -14,6 +14,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httputil"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -65,6 +66,9 @@ func (key Key) RawRequest(method, endpoint string, args string) (*http.Response,
 	req.Header.Set("Apiauth-Key", key.Public)
 	req.Header.Set("Apiauth-Nonce", nonce)
 	req.Header.Set("Apiauth-Signature", string(sign))
+	if method == "POST" {
+		req.Header.Set("Content-type", "application/x-www-form-urlencoded; charset=UTF-8")
+	}
 	if DumpQueries {
 		dump, _ := httputil.DumpRequest(req, true)
 		log.Debug(string(dump))
@@ -112,6 +116,7 @@ func (key Key) DecodedRequest(method, endpoint string, args string, out interfac
 		// "nonce was too small". probably we maneged to send multiple requests in almost same time
 		case 42:
 			time.Sleep(time.Millisecond)
+			err = errors.New(result.Error.Message)
 			continue
 		default:
 			return "", errors.New(result.Error.Message)
@@ -194,7 +199,26 @@ type Advertisement struct {
 	} `json:"actions"`
 }
 
-func (key Key) ByOnlineList(currency string) ([]Advertisement, error) {
+func (key Key) CurrencyList() (ret []string, err error) {
+	var result struct {
+		Currencies map[string]struct {
+			Name    string `json:"name"`
+			Altcoin bool   `json:"altcoin"`
+		} `json:"currencies"`
+		Count uint64 `json:"currency_count"`
+	}
+	_, err = key.DecodedRequest("GET", "/api/currencies/", "", &result)
+	if err != nil {
+		return ret, err
+	}
+	ret = make([]string, 0, len(result.Currencies))
+	for cur := range result.Currencies {
+		ret = append(ret, cur)
+	}
+	return ret, nil
+}
+
+func (key Key) BuyOnlineList(currency string) ([]Advertisement, error) {
 	var ret []Advertisement
 	uri := fmt.Sprintf("/buy-bitcoins-online/%s/.json", currency)
 	for {
@@ -213,4 +237,20 @@ func (key Key) ByOnlineList(currency string) ([]Advertisement, error) {
 		uri = next
 	}
 	return ret, nil
+}
+
+func (key Key) CreateInvoice(currency string, amount decimal.Decimal, description string, internal bool, returnURL string) error {
+	data := url.Values{}
+	data.Set("currency", currency)
+	data.Set("amount", amount.String())
+	data.Set("description", description)
+	if internal {
+		data.Set("internal", "1")
+	}
+	if returnURL != "" {
+		data.Set("return_url", returnURL)
+	}
+	var result json.RawMessage
+	_, err := key.DecodedRequest("POST", "/api/merchant/new_invoice/", data.Encode(), &result)
+	return err
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"common/log"
 	"common/proxy"
+	"github.com/shopspring/decimal"
 	"localbitcoins/lbapi"
 	"net/http"
 	"os"
@@ -19,6 +20,6 @@ func main() {
 		Public: os.Args[1],
 		Secret: os.Args[2],
 	}
-	list, err := key.ByOnlineList("USD")
-	log.Debug("%v\nlen: %v, err: %v", log.IndentEncode(list), len(list), err)
+	err = key.CreateInvoice("RUB", decimal.NewFromFloat(10000), "WAT", true, "")
+	log.Debug("err: %v", err)
 }
