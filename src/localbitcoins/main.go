@@ -19,6 +19,6 @@ func main() {
 		Public: os.Args[1],
 		Secret: os.Args[2],
 	}
-	err = key.ByOnlineList("RUB")
-	log.Fatal(err)
+	list, err := key.ByOnlineList("USD")
+	log.Debug("%v\nlen: %v, err: %v", log.IndentEncode(list), len(list), err)
 }
