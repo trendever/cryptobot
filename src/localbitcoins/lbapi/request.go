@@ -239,7 +239,10 @@ func (key Key) BuyOnlineList(currency string) ([]Advertisement, error) {
 	return ret, nil
 }
 
-func (key Key) CreateInvoice(currency string, amount decimal.Decimal, description string, internal bool, returnURL string) error {
+// @TODO no way to do this without verify of account. So i do not even know what it returns %)
+func (key Key) createInvoice(
+	currency string, amount decimal.Decimal, description string, internal bool, returnURL string,
+) (json.RawMessage, error) {
 	data := url.Values{}
 	data.Set("currency", currency)
 	data.Set("amount", amount.String())
@@ -252,5 +255,50 @@ func (key Key) CreateInvoice(currency string, amount decimal.Decimal, descriptio
 	}
 	var result json.RawMessage
 	_, err := key.DecodedRequest("POST", "/api/merchant/new_invoice/", data.Encode(), &result)
-	return err
+	return result, err
+}
+
+type Transaction struct {
+	// bitcoin transaction id. Empty for transactions inside lb
+	TxID        string          `json:"txid"`
+	Amount      decimal.Decimal `json:"amount"`
+	Description string          `json:"description"`
+	Type        uint64          `json:"tx_type"`
+	CreatedAt   time.Time       `json:"created_at"`
+}
+
+type Wallet struct {
+	// just "OK" most of time. totally useful
+	Message string `json:"message"`
+	Total   struct {
+		Balance  decimal.Decimal `json:"balance"`
+		Sendable decimal.Decimal `json:"sendable"`
+	} `json:"total"`
+	Sent             []Transaction `json:"sent_transactions_30d"`
+	Received         []Transaction `json:"received_transactions_30d"`
+	ReceivingAddress string        `json:"receiving_address"`
+	OldAddress       []struct {
+		Address  string          `json:"address"`
+		Received decimal.Decimal `json:"received"`
+	} `json:"old_address_list"`
+}
+
+func (key Key) Wallet() (Wallet, error) {
+	var result Wallet
+	_, err := key.DecodedRequest("GET", "/api/wallet/", "", &result)
+	return result, err
+}
+
+// Creates new bitcoin address for receiving coins to wallet.
+// Old addresses should stay valid, but wallet api returns max 10 old addresses and there is note:
+// > The old addresses are truncated, because they are not meant to be used.
+// @CHECK So, are addresses linked to wallet persistently or what?
+func (key Key) NewAddress() (string, error) {
+	var result struct {
+		// "OK!", with damn '!'. Insanity
+		Message string `json:"message"`
+		Address string `json:"address"`
+	}
+	_, err := key.DecodedRequest("GET", "/api/wallet-addr/", "", &result)
+	return result.Address, err
 }
