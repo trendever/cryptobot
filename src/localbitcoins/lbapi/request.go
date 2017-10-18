@@ -30,8 +30,8 @@ var (
 )
 
 type Key struct {
-	Public string
-	Secret string
+	Public string `gorm:"column:lb_key"`
+	Secret string `gorm:"column:lb_secret"`
 }
 
 func (key Key) RawRequest(method, endpoint string, args string) (*http.Response, error) {
@@ -84,16 +84,22 @@ func (key Key) RawRequest(method, endpoint string, args string) (*http.Response,
 	return resp, err
 }
 
+type Error struct {
+	Code    int64  `json:"error_code"`
+	Message string `json:"message"`
+}
+
+func (err Error) Error() string {
+	return err.Message
+}
+
 func (key Key) DecodedRequest(method, endpoint string, args string, out interface{}) (nextPage string, err error) {
 	var result = struct {
 		Data       interface{} `json:"data"`
 		Pagination struct {
 			Next string `json:"next"`
 		} `json:"pagination"`
-		Error struct {
-			Code    int64  `json:"error_code"`
-			Message string `json:"message"`
-		} `json:"error"`
+		Error Error `json:"error"`
 	}{Data: out}
 	for attempt := 0; attempt < 3; attempt++ {
 		var resp *http.Response
@@ -119,7 +125,7 @@ func (key Key) DecodedRequest(method, endpoint string, args string, out interfac
 			err = errors.New(result.Error.Message)
 			continue
 		default:
-			return "", errors.New(result.Error.Message)
+			return "", result.Error
 		}
 	}
 	return
@@ -171,7 +177,7 @@ type Advertisement struct {
 			LastOnline time.Time `json:"last_online"`
 			// can contain bs values like "N/A" or "10 000+"
 			TradeCount    string `json:"trade_count"`
-			FeedbackScore int64  `json:"feedback_score"`
+			FeedbackScore string `json:"feedback_score"`
 			// >username, trade count and feedback score combined
 			Combined string `json:"name"`
 		} `json:"profile"`
@@ -260,8 +266,8 @@ func (key Key) createInvoice(
 
 type Transaction struct {
 	// bitcoin transaction id. Empty for transactions inside lb
-	TxID        string          `json:"txid"`
-	Amount      decimal.Decimal `json:"amount"`
+	BitcoinTx   string          `json:"txid"`
+	Amount      decimal.Decimal `json:"amount",sql:"type:decimal"`
 	Description string          `json:"description"`
 	Type        uint64          `json:"tx_type"`
 	CreatedAt   time.Time       `json:"created_at"`
@@ -301,4 +307,39 @@ func (key Key) NewAddress() (string, error) {
 	}
 	_, err := key.DecodedRequest("GET", "/api/wallet-addr/", "", &result)
 	return result.Address, err
+}
+
+type Account struct {
+	Username                  string    `json:"username"`
+	CreatedAt                 time.Time `json:"created_at"`
+	TradingPartnersCount      uint64    `json:"trading_partners_count"`
+	FeedbacksUnconfirmedCount uint64    `json:"feedbacks_unconfirmed_count"`
+	// >"Less than 25 BTC"
+	TradeVolume     string `json:"trade_volume_text"`
+	HasCommonTrades bool   `json:"has_common_trades"`
+	// text value actuality
+	ConfirmedTradeCount string `json:"confirmed_trade_count_text"`
+	BlockedCount        uint64 `json:"blocked_count"`
+	// for FeedbackCount == 0 contains "N/A"
+	FeedbackScore          string    `json:"feedback_score"`
+	FeedbackCount          uint64    `json:"feedback_count"`
+	URL                    string    `json:"url"`
+	TrustedCount           uint64    `json:"trusted_count"`
+	IdentityVerifiedAt     time.Time `json:"identity_verified_at"`
+	VerificationsTrusted   uint64    `json:"real_name_verifications_trusted"`
+	VerificationsUntrusted uint64    `json:"real_name_verifications_untrusted"`
+	VerificationsRejected  uint64    `json:"real_name_verifications_rejected"`
+}
+
+func (key Key) Self() (Account, error) {
+	var result Account
+	_, err := key.DecodedRequest("GET", "/api/myself/", "", &result)
+	return result, err
+}
+
+// if user does not exist, error message will be literally "Invalid user." (with damn dot)
+func (key Key) AccountInfo(username string) (Account, error) {
+	var result Account
+	_, err := key.DecodedRequest("GET", fmt.Sprintf("/api/account_info/%v/", username), "", &result)
+	return result, err
 }
