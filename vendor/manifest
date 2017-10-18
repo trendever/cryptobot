@@ -8,6 +8,12 @@
 			"branch": "master"
 		},
 		{
+			"importpath": "github.com/armon/go-radix",
+			"repository": "https://github.com/armon/go-radix",
+			"revision": "1fca145dffbcaa8fe914309b1ec0cfc67500fe61",
+			"branch": "master"
+		},
+		{
 			"importpath": "github.com/certifi/gocertifi",
 			"repository": "https://github.com/certifi/gocertifi",
 			"revision": "3fd9e1adb12b72d2f3f82191d49be9b93c69f67c",
@@ -54,6 +60,13 @@
 			"revision": "1817cd4bea52af76542157eeabd74b057d1a199e",
 			"branch": "master",
 			"path": "/semver"
+		},
+		{
+			"importpath": "github.com/cpuguy83/go-md2man/md2man",
+			"repository": "https://github.com/cpuguy83/go-md2man",
+			"revision": "1d903dcb749992f3741d744c0f8376b4bd7eb3e1",
+			"branch": "master",
+			"path": "/md2man"
 		},
 		{
 			"importpath": "github.com/denisenkom/go-mssqldb",
@@ -168,6 +181,18 @@
 			"branch": "master"
 		},
 		{
+			"importpath": "github.com/mitchellh/go-homedir",
+			"repository": "https://github.com/mitchellh/go-homedir",
+			"revision": "b8bc1bf767474819792c23f32d8286a45736f1c6",
+			"branch": "master"
+		},
+		{
+			"importpath": "github.com/mitchellh/hashstructure",
+			"repository": "https://github.com/mitchellh/hashstructure",
+			"revision": "2bca23e0e452137f789efbc8610126fd8b94f73b",
+			"branch": "master"
+		},
+		{
 			"importpath": "github.com/mitchellh/mapstructure",
 			"repository": "https://github.com/mitchellh/mapstructure",
 			"revision": "d0303fe809921458f417bcf828397a65db30a7e4",
@@ -177,6 +202,18 @@
 			"importpath": "github.com/pelletier/go-toml",
 			"repository": "https://github.com/pelletier/go-toml",
 			"revision": "2009e44b6f182e34d8ce081ac2767622937ea3d4",
+			"branch": "master"
+		},
+		{
+			"importpath": "github.com/pkg/errors",
+			"repository": "https://github.com/pkg/errors",
+			"revision": "2b3a18b5f0fb6b4f9190549597d3f962c02bc5eb",
+			"branch": "master"
+		},
+		{
+			"importpath": "github.com/russross/blackfriday",
+			"repository": "https://github.com/russross/blackfriday",
+			"revision": "6d1ef893fcb01b4f50cb6e57ed7df3e2e627b6b2",
 			"branch": "master"
 		},
 		{
@@ -198,6 +235,12 @@
 			"branch": "master"
 		},
 		{
+			"importpath": "github.com/spf13/cobra",
+			"repository": "https://github.com/spf13/cobra",
+			"revision": "7b2c5ac9fc04fc5efafb60700713d4fa609b777b",
+			"branch": "master"
+		},
+		{
 			"importpath": "github.com/spf13/jwalterweatherman",
 			"repository": "https://github.com/spf13/jwalterweatherman",
 			"revision": "12bd96e66386c1960ab0f74ced1362f66f552f7b",
@@ -213,6 +256,12 @@
 			"importpath": "github.com/spf13/viper",
 			"repository": "https://github.com/spf13/viper",
 			"revision": "d9cca5ef33035202efb1586825bdbb15ff9ec3ba",
+			"branch": "master"
+		},
+		{
+			"importpath": "github.com/tucnak/telebot",
+			"repository": "https://github.com/tucnak/telebot",
+			"revision": "00cebf376d79ee4363a11cd66fbbdf565452e0ab",
 			"branch": "master"
 		},
 		{
