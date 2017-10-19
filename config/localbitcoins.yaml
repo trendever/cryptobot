@@ -1,0 +1,21 @@
+lbKey:
+  public: 1cdd24716124f3ad763c339acd63aed0
+  secret: 8bbdd5e045eaefa7da95e4dfd844a8607acbd9e1b69de97475cb82c253da43ee
+
+debug: true
+dumpQueries: true
+
+proxy: ""
+sentryDNS: ""
+
+lbCheckTick: "30s"
+
+db:
+  debug:    true
+  user:     postgres
+  password: 1234
+  host:     db
+  port:     5432
+  base:     postgres
+
+
