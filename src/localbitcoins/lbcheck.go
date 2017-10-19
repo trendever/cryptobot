@@ -1,13 +1,13 @@
 package main
 
 import (
-	"time"
-	"common/log"
 	"common/db"
-	"strings"
-	"strconv"
+	"common/log"
 	"github.com/jinzhu/gorm"
 	"localbitcoins/lbapi"
+	"strconv"
+	"strings"
+	"time"
 )
 
 const DepositTransactionPrefix = "DEPO."
@@ -33,7 +33,7 @@ func ProcessIncomingTx(event lbapi.Transaction) error {
 	// i'm not sure whether we can rely on lb log consistence, so it's better to try save everything every time
 	tx := db.NewTransaction().Set("gorm:insert_option", "ON CONFLICT DO NOTHING")
 	data := LBTransaction{
-		Direction: TransactionDirection_To,
+		Direction:   TransactionDirection_To,
 		Transaction: event,
 	}
 	err := tx.Create(&data).Error
@@ -85,10 +85,9 @@ func ProcessIncomingTx(event lbapi.Transaction) error {
 	return nil
 }
 
-
 func SaveOutgoingTx(event lbapi.Transaction) error {
 	err := db.New().Set("gorm:insert_option", "ON CONFLICT DO NOTHING").Create(&LBTransaction{
-		Direction: TransactionDirection_From,
+		Direction:   TransactionDirection_From,
 		Transaction: event,
 	}).Error
 	if err == nil || err.Error() == "sql: no rows in result set" {
@@ -96,4 +95,3 @@ func SaveOutgoingTx(event lbapi.Transaction) error {
 	}
 	return err
 }
-

@@ -18,7 +18,7 @@ const (
 type TransactionDirection int
 
 const (
-	TransactionDirection_To TransactionDirection = 0
+	TransactionDirection_To   TransactionDirection = 0
 	TransactionDirection_From TransactionDirection = 1
 )
 
@@ -35,7 +35,7 @@ type Operator struct {
 }
 
 type LBTransaction struct {
-	ID uint64
+	ID        uint64
 	Direction TransactionDirection
 	lbapi.Transaction
 }

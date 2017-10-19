@@ -1,13 +1,13 @@
 package main
 
 import (
+	"common/cli"
 	"common/config"
+	"common/db"
 	"common/log"
 	"common/proxy"
-	"common/db"
 	"localbitcoins/lbapi"
 	"net/http"
-	"common/cli"
 	"time"
 )
 
@@ -22,12 +22,12 @@ var conf struct {
 	LBCheckTick string
 	lbCheckTick time.Duration
 
-	DB          db.Settings
+	DB db.Settings
 
-	SentryDSN   string
+	SentryDSN string
 }
 
-type service struct {}
+type service struct{}
 
 func main() {
 	cli.Main(&service{})
