@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	BASE_URL = "https://localbitcoins.com"
+	BASE_URL = "https://localbitcoins.net"
 )
 
 var (
@@ -267,9 +267,9 @@ func (key Key) createInvoice(
 type Transaction struct {
 	// bitcoin transaction id. Empty for transactions inside lb
 	BitcoinTx   string          `json:"txid"`
-	Amount      decimal.Decimal `json:"amount",sql:"type:decimal"`
+	Amount      decimal.Decimal `json:"amount" gorm:"type:decimal"`
 	Description string          `json:"description"`
-	Type        uint64          `json:"tx_type"`
+	Type        uint64          `json:"tx_type" gorm:"column:lb_type"`
 	CreatedAt   time.Time       `json:"created_at"`
 }
 
