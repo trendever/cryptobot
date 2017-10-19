@@ -1,0 +1,32 @@
+version: "3"
+services:
+  lb:
+    image: debian:stretch
+    volumes:
+      - .:/services:rw
+      - /etc/ssl/certs:/etc/ssl/certs:ro
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/ca-certificates/:/etc/ca-certificates/:ro
+    working_dir: /services/
+    depends_on:
+      - db
+    networks:
+      - crypto
+    command: sh -c './bin/localbitcoins migrate && exec ./bin/localbitcoins start'
+  db:
+    image: "postgres:9-alpine"
+    environment:
+      POSTGRES_PASSWORD: 1234
+      PGDATA: "/var/lib/postgresql/data/pgdata"
+    volumes:
+      - dbdata:/var/lib/postgresql/data/pgdata:rw
+    networks:
+      - crypto
+    ports:
+      - 127.0.0.1:5433:5432
+
+networks:
+  crypto:
+
+volumes:
+  dbdata: {}
