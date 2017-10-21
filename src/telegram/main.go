@@ -4,7 +4,9 @@ import (
 	"common/cli"
 	"common/config"
 	"common/log"
+	"common/stopper"
 	"github.com/tucnak/telebot"
+	"sync"
 	"time"
 )
 
@@ -15,7 +17,15 @@ var conf struct {
 
 	Debug     bool
 	SentryDSN string
+
+	Messages map[string]string
 }
+
+var global = struct {
+	bot       *telebot.Bot
+	stopper   *stopper.Stopper
+	waitGroup sync.WaitGroup
+}{stopper: stopper.NewStopper()}
 
 func main() {
 	cli.Main(service{})
@@ -24,6 +34,7 @@ func main() {
 func (srv service) Load() {
 	log.Fatal(config.LoadStruct("telegram", &conf))
 	log.Init(conf.Debug, "telegram", conf.SentryDSN)
+	log.Debug("config:\n%v", log.IndentEncode(conf))
 }
 
 func (srv service) Migrate(bool) {
@@ -33,25 +44,55 @@ func (srv service) Migrate(bool) {
 
 func (srv service) Start() {
 	srv.Load()
-	bot, err := telebot.NewBot(conf.Token)
+	var err error
+	global.bot, err = telebot.NewBot(conf.Token)
 	log.Fatal(err)
-	Listen(bot)
+	global.waitGroup.Add(1)
+	go Listen()
 }
 
-func (srv service) Cleanup() {}
+func (srv service) Cleanup() {
+	global.stopper.Stop()
+	log.Info("Shuting service down...")
+	global.waitGroup.Wait()
+	log.Info("Service is stopped")
+}
 
-func Listen(bot *telebot.Bot) {
-	messages := make(chan telebot.Message, 100)
-	bot.Listen(messages, 1*time.Second)
+func Listen() {
+	messages := make(chan telebot.Message, 20)
+	global.bot.Listen(messages, 1*time.Second)
 
-	for message := range messages {
-		log.Debug(
-			"got message from chat %v(%v):\n%v",
-			message.Chat.ID, message.Chat.Destination(),
-			message.Text,
-		)
-		if !message.IsPersonal() {
-			continue
+	sessions := map[int64]*Session{}
+
+	// there will be no way to get message again later(telegram do not have such api) in case of any troubles or just a shutdown
+	// @TODO save all messages or something else?
+	for {
+		select {
+		case <-global.stopper.Chan():
+			global.waitGroup.Done()
+			return
+		case message := <-messages:
+			log.Debug(
+				"got message from chat %v(%v):\n%v",
+				message.Chat.ID, message.Chat.Destination(),
+				log.IndentEncode(message),
+			)
+			if !message.IsPersonal() {
+				continue
+			}
+
+			session, ok := sessions[message.Chat.ID]
+			if !ok {
+				var err error
+				session, err = LoadSession(message.Chat.ID)
+				if err != nil {
+					log.Errorf("failed to load session for chat %v: %v", message.Chat.ID, err)
+					continue
+				}
+				// @TODO unload session on timeout?
+				sessions[message.Chat.ID] = session
+			}
+			session.PushMessage(message)
 		}
 	}
 }

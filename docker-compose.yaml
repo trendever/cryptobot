@@ -13,6 +13,18 @@ services:
     networks:
       - crypto
     command: sh -c './bin/localbitcoins migrate && exec ./bin/localbitcoins start'
+  tg:
+    image: debian:stretch
+    volumes:
+      - .:/services:rw
+      - /etc/ssl/certs:/etc/ssl/certs:ro
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/ca-certificates/:/etc/ca-certificates/:ro
+    working_dir: /services/
+    networks:
+      - crypto
+    tty: true
+    command: sh -c 'exec ./bin/telegram start'
   db:
     image: "postgres:9-alpine"
     environment:
