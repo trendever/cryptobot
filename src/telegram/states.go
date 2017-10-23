@@ -23,41 +23,44 @@ type StateActions struct {
 var states map[State]StateActions
 
 func init() {
-	// @TODO real error handling
-	states = map[State]StateActions{
-		State_Start: {
-			Enter: func(s *Session) {
-				log.Error(global.bot.SendMessage(Dest(s.ChatID), M("greetings"), Keyboard(M("set_key"))))
-			},
-			Message: func(s *Session, msg *telebot.Message) {
-				switch msg.Text {
-				case M("set_key"):
-					s.ChangeState(State_ChangeKey)
-					return
-				}
-				log.Error(global.bot.SendMessage(Dest(s.ChatID), M("greetings"), Keyboard(M("set_key"))))
-			},
+	// trick around initialization loop
+	states = statesInit
+}
+
+// @TODO real error handling
+var statesInit = map[State]StateActions{
+	State_Start: {
+		Enter: func(s *Session) {
+			log.Error(global.bot.SendMessage(Dest(s.ChatID), M("greetings"), Keyboard(M("set_key"))))
 		},
-		State_ChangeKey: {
-			Enter: func(s *Session) {
-				log.Error(global.bot.SendMessage(Dest(s.ChatID), M("input_public_key"), Keyboard(M("cancel"))))
-			},
-			Message: func(s *Session, msg *telebot.Message) {
-				if msg.Text == M("cancel") {
-					// @TODO what if operator already have valid key and stated change by mistake?
-					s.ChangeState(State_Start)
-				}
-				// we already have public key, so it's secret part now
-				if s.context != nil {
-					// @TODO tell it to core and stuff
-					log.Debug("p: '%v', s: '%v'", s.context, msg.Text)
-				} else {
-					s.context = msg.Text
-					log.Error(global.bot.SendMessage(Dest(s.ChatID), M("input_secter_key"), Keyboard(M("cancel"))))
-				}
-			},
+		Message: func(s *Session, msg *telebot.Message) {
+			switch msg.Text {
+			case M("set_key"):
+				s.ChangeState(State_ChangeKey)
+				return
+			}
+			log.Error(global.bot.SendMessage(Dest(s.ChatID), M("greetings"), Keyboard(M("set_key"))))
 		},
-	}
+	},
+	State_ChangeKey: {
+		Enter: func(s *Session) {
+			log.Error(global.bot.SendMessage(Dest(s.ChatID), M("input_public_key"), Keyboard(M("cancel"))))
+		},
+		Message: func(s *Session, msg *telebot.Message) {
+			if msg.Text == M("cancel") {
+				// @TODO what if operator already have valid key and stated change by mistake?
+				s.ChangeState(State_Start)
+			}
+			// we already have public key, so it's secret part now
+			if s.context != nil {
+				// @TODO tell it to core and stuff
+				log.Debug("p: '%v', s: '%v'", s.context, msg.Text)
+			} else {
+				s.context = msg.Text
+				log.Error(global.bot.SendMessage(Dest(s.ChatID), M("input_secter_key"), Keyboard(M("cancel"))))
+			}
+		},
+	},
 }
 
 func M(key string) string {
