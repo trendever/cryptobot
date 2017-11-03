@@ -259,6 +259,12 @@
 			"branch": "master"
 		},
 		{
+			"importpath": "github.com/streadway/amqp",
+			"repository": "https://github.com/streadway/amqp",
+			"revision": "7db842394ca79f338f781d47bc59115f44adb20b",
+			"branch": "master"
+		},
+		{
 			"importpath": "github.com/tucnak/telebot",
 			"repository": "https://github.com/tucnak/telebot",
 			"revision": "00cebf376d79ee4363a11cd66fbbdf565452e0ab",
