@@ -34,6 +34,22 @@ type Key struct {
 	Secret string `gorm:"column:lb_secret"`
 }
 
+func (key Key) IsValid() (public bool, secret bool) {
+	test := func(str string, length int) bool {
+		if len(str) != length {
+			return false
+		}
+		// For some reason register of keys matters for lb.
+		for _, c := range str {
+			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+				return false
+			}
+		}
+		return true
+	}
+	return test(key.Public, 32), test(key.Secret, 64)
+}
+
 func (key Key) RawRequest(method, endpoint string, args string) (*http.Response, error) {
 	split := strings.Split(endpoint, "?")
 	if len(split) == 2 {
@@ -43,6 +59,7 @@ func (key Key) RawRequest(method, endpoint string, args string) (*http.Response,
 	url := BASE_URL + endpoint
 	nonce := strconv.FormatInt(time.Now().UnixNano()/100, 10)
 	data := nonce + key.Public + endpoint + args
+	// Yep, lb does not decode hex actuality, it uses key bytes as is.
 	hash := hmac.New(sha256.New, []byte(key.Secret))
 	hash.Write([]byte(data))
 	sign := strings.ToUpper(hex.EncodeToString(hash.Sum(nil)))

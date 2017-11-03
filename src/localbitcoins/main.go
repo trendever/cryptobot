@@ -6,6 +6,7 @@ import (
 	"common/db"
 	"common/log"
 	"common/proxy"
+	"common/rabbit"
 	"localbitcoins/lbapi"
 	"net/http"
 	"time"
@@ -23,6 +24,8 @@ var conf struct {
 	lbCheckTick time.Duration
 
 	DB db.Settings
+
+	Rabbit rabbit.Config
 
 	SentryDSN string
 }
@@ -72,5 +75,8 @@ func (srv service) Start() {
 	if err != nil {
 		log.Fatalf("failed to init-check buffer wallet: %v", err)
 	}
-	LBCheckLoop()
+
+	rabbit.Start(&conf.Rabbit)
+
+	go LBCheckLoop()
 }
