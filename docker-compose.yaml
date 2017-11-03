@@ -23,7 +23,6 @@ services:
     working_dir: /services/
     networks:
       - crypto
-    tty: true
     command: sh -c 'exec ./bin/telegram start'
   db:
     image: "postgres:9-alpine"
@@ -36,9 +35,20 @@ services:
       - crypto
     ports:
       - 127.0.0.1:5433:5432
+  rabbit:
+    image: "rabbitmq:3-management-alpine"
+    volumes:
+      - rabbitdata:/var/lib/rabbitmq:rw
+    networks:
+      - crypto
+    ports:
+      - 127.0.0.1:5672:5672
+      # managment web interface
+      - 127.0.0.1:8070:15672
 
 networks:
   crypto:
 
 volumes:
   dbdata: {}
+  rabbitdata: {}
