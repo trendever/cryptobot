@@ -1,5 +1,8 @@
 token: 335059363:AAFdoX84yKMKQr38DdKT7oQe9uefHHgizyQ
 debug: true
 
+rabbit:
+    URL: "amqp://guest:guest@rabbit"
+
 messages:
     greetings: "hi"

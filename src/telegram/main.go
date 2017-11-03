@@ -4,6 +4,7 @@ import (
 	"common/cli"
 	"common/config"
 	"common/log"
+	"common/rabbit"
 	"common/stopper"
 	"github.com/tucnak/telebot"
 	"sync"
@@ -13,7 +14,8 @@ import (
 type service struct{}
 
 var conf struct {
-	Token string
+	Token  string
+	Rabbit rabbit.Config
 
 	Debug     bool
 	SentryDSN string
@@ -26,6 +28,8 @@ var global = struct {
 	stopper   *stopper.Stopper
 	waitGroup sync.WaitGroup
 }{stopper: stopper.NewStopper()}
+
+var SendMessage func(recipient telebot.Recipient, message string, options *telebot.SendOptions) error
 
 func main() {
 	cli.Main(service{})
@@ -47,12 +51,15 @@ func (srv service) Start() {
 	var err error
 	global.bot, err = telebot.NewBot(conf.Token)
 	log.Fatal(err)
+	SendMessage = global.bot.SendMessage
+	rabbit.Start(&conf.Rabbit)
 	global.waitGroup.Add(1)
 	go Listen()
 }
 
 func (srv service) Cleanup() {
 	global.stopper.Stop()
+	rabbit.Stop()
 	log.Info("Shuting service down...")
 	global.waitGroup.Wait()
 	log.Info("Service is stopped")
