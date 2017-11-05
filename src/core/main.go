@@ -7,12 +7,12 @@ import (
 	"common/log"
 	"common/proxy"
 	"common/rabbit"
-	"localbitcoins/lbapi"
+	"lbapi"
 	"net/http"
 	"time"
 )
 
-const ServiceName = "localbitcoins"
+const ServiceName = "core"
 
 var conf struct {
 	LBKey       lbapi.Key

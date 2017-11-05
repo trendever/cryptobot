@@ -4,7 +4,7 @@ import (
 	"common/log"
 	"fmt"
 	"github.com/tucnak/telebot"
-	"localbitcoins/lbapi"
+	"lbapi"
 	"strconv"
 )
 
@@ -56,9 +56,20 @@ func changeKey(s *Session, msg *telebot.Message) {
 	if msg.Text == M("cancel") {
 		// @TODO what if operator already have valid key and stated change by mistake?
 		s.ChangeState(State_Start)
+		return
 	}
-	// we already have public key, so it's secret part now
-	if s.context != nil {
+	if s.context == nil {
+		key := lbapi.Key{
+			Public: msg.Text,
+		}
+		ok, _ := key.IsValid()
+		if !ok {
+			log.Error(SendMessage(Dest(s.ChatID), M("invalid_key"), Keyboard(M("cancel"))))
+			return
+		}
+		s.context = key
+		log.Error(SendMessage(Dest(s.ChatID), M("input_secret_key"), Keyboard(M("cancel"))))
+	} else { // We have public key already, so it's secret part now.
 		key := s.context.(lbapi.Key)
 		key.Secret = msg.Text
 		_, ok := key.IsValid()
@@ -74,17 +85,6 @@ func changeKey(s *Session, msg *telebot.Message) {
 			return
 		}
 		log.Error(SendMessage(Dest(s.ChatID), fmt.Sprintf(M("check_key: %v"), op), nil))
-	} else {
-		key := lbapi.Key{
-			Public: msg.Text,
-		}
-		ok, _ := key.IsValid()
-		if !ok {
-			log.Error(SendMessage(Dest(s.ChatID), M("invalid_key"), Keyboard(M("cancel"))))
-			return
-		}
-		s.context = key
-		log.Error(SendMessage(Dest(s.ChatID), M("input_secret_key"), Keyboard(M("cancel"))))
 	}
 }
 

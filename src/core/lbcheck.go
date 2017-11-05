@@ -4,7 +4,7 @@ import (
 	"common/db"
 	"common/log"
 	"github.com/jinzhu/gorm"
-	"localbitcoins/lbapi"
+	"lbapi"
 	"strconv"
 	"strings"
 	"time"

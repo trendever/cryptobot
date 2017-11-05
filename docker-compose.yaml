@@ -1,6 +1,6 @@
 version: "3"
 services:
-  lb:
+  core:
     image: debian:stretch
     volumes:
       - .:/services:rw
@@ -12,7 +12,7 @@ services:
       - db
     networks:
       - crypto
-    command: sh -c './bin/localbitcoins migrate && exec ./bin/localbitcoins start'
+    command: sh -c './bin/core migrate && exec ./bin/core start'
   tg:
     image: debian:stretch
     volumes:

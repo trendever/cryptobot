@@ -2,8 +2,8 @@ package main
 
 import (
 	"common/rabbit"
-	"localbitcoins/lbapi"
-	"localbitcoins/proto"
+	"core/proto"
+	"lbapi"
 )
 
 var CheckKey func(lbapi.Key) (proto.Operator, error)

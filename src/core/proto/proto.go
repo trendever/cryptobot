@@ -2,7 +2,7 @@ package proto
 
 import (
 	"common/rabbit"
-	"localbitcoins/lbapi"
+	"lbapi"
 )
 
 type Operator struct {

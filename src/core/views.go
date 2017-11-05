@@ -3,9 +3,9 @@ package main
 import (
 	"common/db"
 	"common/rabbit"
+	"core/proto"
 	"errors"
-	"localbitcoins/lbapi"
-	"localbitcoins/proto"
+	"lbapi"
 )
 
 func init() {

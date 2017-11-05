@@ -3,7 +3,7 @@ package main
 import (
 	"common/db"
 	"github.com/shopspring/decimal"
-	"localbitcoins/lbapi"
+	"lbapi"
 )
 
 type AccountStatus int
