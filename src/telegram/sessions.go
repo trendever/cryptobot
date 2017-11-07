@@ -7,6 +7,7 @@ import (
 )
 
 type Session struct {
+	UserID uint64
 	ChatID int64 `gorm:"primary_key"`
 	State  State
 	// per state context, clears on state change
@@ -78,7 +79,7 @@ func (s *Session) loop() {
 			actions, ok := states[s.State]
 			if !ok {
 				// @TODO reload session?
-				actions = states[State_Unknown]
+				actions = states[State_Start]
 			}
 			actions.Message(s, &msg)
 		}

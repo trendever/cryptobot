@@ -2,6 +2,7 @@ package main
 
 import (
 	"common/log"
+	"common/rabbit"
 	"fmt"
 	"github.com/tucnak/telebot"
 	"lbapi"
@@ -12,14 +13,14 @@ type State int
 
 const (
 	State_Start State = iota
-	State_Unknown
 	State_ChangeKey
 )
 
 type StateActions struct {
-	Enter   func(s *Session)
-	Message func(s *Session, msg *telebot.Message)
-	Exit    func(s *Session)
+	Enter       func(s *Session)
+	Message     func(s *Session, msg *telebot.Message)
+	Exit        func(s *Session)
+	Recoverable bool
 }
 
 var states map[State]StateActions
@@ -33,20 +34,21 @@ func init() {
 var statesInit = map[State]StateActions{
 	State_Start: {
 		Enter: func(s *Session) {
-			log.Error(SendMessage(Dest(s.ChatID), M("greetings"), Keyboard(M("set_key"))))
+			log.Error(SendMessage(Dest(s.ChatID), M("start"), Keyboard(M("set key"))))
 		},
 		Message: func(s *Session, msg *telebot.Message) {
 			switch msg.Text {
-			case M("set_key"):
+			case M("set key"):
 				s.ChangeState(State_ChangeKey)
 				return
 			}
-			log.Error(SendMessage(Dest(s.ChatID), M("greetings"), Keyboard(M("set_key"))))
+			log.Error(SendMessage(Dest(s.ChatID), M("start"), Keyboard(M("set key"))))
 		},
+		Recoverable: true,
 	},
 	State_ChangeKey: {
 		Enter: func(s *Session) {
-			log.Error(SendMessage(Dest(s.ChatID), M("input_public_key"), Keyboard(M("cancel"))))
+			log.Error(SendMessage(Dest(s.ChatID), M("input public key"), Keyboard(M("cancel"))))
 		},
 		Message: changeKey,
 	},
@@ -54,7 +56,6 @@ var statesInit = map[State]StateActions{
 
 func changeKey(s *Session, msg *telebot.Message) {
 	if msg.Text == M("cancel") {
-		// @TODO what if operator already have valid key and stated change by mistake?
 		s.ChangeState(State_Start)
 		return
 	}
@@ -64,27 +65,32 @@ func changeKey(s *Session, msg *telebot.Message) {
 		}
 		ok, _ := key.IsValid()
 		if !ok {
-			log.Error(SendMessage(Dest(s.ChatID), M("invalid_key"), Keyboard(M("cancel"))))
+			log.Error(SendMessage(Dest(s.ChatID), M("invalid key"), Keyboard(M("cancel"))))
 			return
 		}
 		s.context = key
-		log.Error(SendMessage(Dest(s.ChatID), M("input_secret_key"), Keyboard(M("cancel"))))
+		log.Error(SendMessage(Dest(s.ChatID), M("input secret key"), Keyboard(M("cancel"))))
 	} else { // We have public key already, so it's secret part now.
 		key := s.context.(lbapi.Key)
 		key.Secret = msg.Text
 		_, ok := key.IsValid()
 		if !ok {
-			log.Error(SendMessage(Dest(s.ChatID), M("invalid_key"), Keyboard(M("cancel"))))
+			log.Error(SendMessage(Dest(s.ChatID), M("invalid key"), Keyboard(M("cancel"))))
 			return
 		}
 		op, err := CheckKey(key)
-		// @TODO Kind of error
 		if err != nil {
-			log.Error(SendMessage(Dest(s.ChatID), fmt.Sprintf(M("check_key_falied: %v"), err), nil))
+			rpcErr := err.(rabbit.RPCError)
+			if rpcErr.Description == "HMAC authentication key and signature was given, but they are invalid." {
+				log.Error(SendMessage(Dest(s.ChatID), fmt.Sprintf(M("invalid key"), err), nil))
+			} else {
+				log.Error(SendMessage(Dest(s.ChatID), fmt.Sprintf(M("service unavailable"), err), nil))
+			}
 			s.ChangeState(State_Start)
 			return
 		}
-		log.Error(SendMessage(Dest(s.ChatID), fmt.Sprintf(M("check_key: %v"), op), nil))
+
+		log.Error(SendMessage(Dest(s.ChatID), fmt.Sprintf(M("check key: %v"), op), nil))
 	}
 }
 
