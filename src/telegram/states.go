@@ -34,7 +34,7 @@ func init() {
 var statesInit = map[State]StateActions{
 	State_Start: {
 		Enter: func(s *Session) {
-			log.Error(SendMessage(Dest(s.ChatID), M("start"), Keyboard(M("set key"))))
+			log.Error(SendMessage(s.Dest(), M("start"), Keyboard(M("set key"))))
 		},
 		Message: func(s *Session, msg *telebot.Message) {
 			switch msg.Text {
@@ -42,13 +42,13 @@ var statesInit = map[State]StateActions{
 				s.ChangeState(State_ChangeKey)
 				return
 			}
-			log.Error(SendMessage(Dest(s.ChatID), M("start"), Keyboard(M("set key"))))
+			log.Error(SendMessage(s.Dest(), M("start"), Keyboard(M("set key"))))
 		},
 		Recoverable: true,
 	},
 	State_ChangeKey: {
 		Enter: func(s *Session) {
-			log.Error(SendMessage(Dest(s.ChatID), M("input public key"), Keyboard(M("cancel"))))
+			log.Error(SendMessage(s.Dest(), M("input public key"), Keyboard(M("cancel"))))
 		},
 		Message: changeKey,
 	},
@@ -65,32 +65,32 @@ func changeKey(s *Session, msg *telebot.Message) {
 		}
 		ok, _ := key.IsValid()
 		if !ok {
-			log.Error(SendMessage(Dest(s.ChatID), M("invalid key"), Keyboard(M("cancel"))))
+			log.Error(SendMessage(s.Dest(), M("invalid key"), Keyboard(M("cancel"))))
 			return
 		}
 		s.context = key
-		log.Error(SendMessage(Dest(s.ChatID), M("input secret key"), Keyboard(M("cancel"))))
+		log.Error(SendMessage(s.Dest(), M("input secret key"), Keyboard(M("cancel"))))
 	} else { // We have public key already, so it's secret part now.
 		key := s.context.(lbapi.Key)
 		key.Secret = msg.Text
 		_, ok := key.IsValid()
 		if !ok {
-			log.Error(SendMessage(Dest(s.ChatID), M("invalid key"), Keyboard(M("cancel"))))
+			log.Error(SendMessage(s.Dest(), M("invalid key"), Keyboard(M("cancel"))))
 			return
 		}
 		op, err := CheckKey(key)
 		if err != nil {
 			rpcErr := err.(rabbit.RPCError)
 			if rpcErr.Description == "HMAC authentication key and signature was given, but they are invalid." {
-				log.Error(SendMessage(Dest(s.ChatID), fmt.Sprintf(M("invalid key"), err), nil))
+				log.Error(SendMessage(s.Dest(), fmt.Sprintf(M("invalid key"), err), nil))
 			} else {
-				log.Error(SendMessage(Dest(s.ChatID), fmt.Sprintf(M("service unavailable"), err), nil))
+				log.Error(SendMessage(s.Dest(), fmt.Sprintf(M("service unavailable"), err), nil))
 			}
 			s.ChangeState(State_Start)
 			return
 		}
 
-		log.Error(SendMessage(Dest(s.ChatID), fmt.Sprintf(M("check key: %v"), op), nil))
+		log.Error(SendMessage(s.Dest(), fmt.Sprintf(M("check key: %v"), op), nil))
 	}
 }
 

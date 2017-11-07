@@ -3,24 +3,27 @@ package main
 import (
 	"common/log"
 	"common/stopper"
+	"core/proto"
 	"github.com/tucnak/telebot"
 )
 
 type Session struct {
 	UserID uint64
 	ChatID int64 `gorm:"primary_key"`
+	LBName string
 	State  State
 	// per state context, clears on state change
 	// @CHECK may map[string]string be better choice?
 	context interface{}
 	inbox   chan telebot.Message
 	stopper *stopper.Stopper
-	// @TODO waitgroup for graceful shutdown?
 }
 
 func NewSession(chatID int64) *Session {
 	s := &Session{
+		UserID:  0,
 		ChatID:  chatID,
+		LBName:  "",
 		inbox:   make(chan telebot.Message, 4),
 		State:   State_Start,
 		stopper: stopper.NewStopper(),
@@ -31,12 +34,52 @@ func NewSession(chatID int64) *Session {
 }
 
 func LoadSession(chatID int64) (*Session, error) {
-	// @TODO
-	return NewSession(chatID), nil
+	op, err := OperatorByTd(chatID)
+	if err != nil {
+		return NewSession(chatID), err
+	}
+	ses := &Session{
+		UserID:  op.ID,
+		ChatID:  chatID,
+		LBName:  op.Username,
+		State:   State_Start,
+		inbox:   make(chan telebot.Message, 4),
+		stopper: stopper.NewStopper(),
+	}
+	ses.StateFromStatus(op.Status)
+	return ses, nil
 }
 
 func (s *Session) PushMessage(msg telebot.Message) {
 	s.inbox <- msg
+}
+
+func (s *Session) Reload() {
+	op, err := OperatorByTd(s.ChatID)
+	if err != nil {
+		log.Errorf("failed to reload session for chat %v: %v", s.ChatID, err)
+		return
+	}
+	s.LBName = op.Username
+	s.StateFromStatus(op.Status)
+}
+
+func (s *Session) StateFromStatus(status proto.OperatorStatus) {
+	switch status {
+	case proto.OperatorStatus_None, proto.OperatorStatus_Inactive:
+		s.ChangeState(State_Start)
+	case proto.OperatorStatus_Ready:
+		// @TODO
+	case proto.OperatorStatus_Busy:
+		// @TODO
+	default:
+		log.Errorf("unknown operator status %v in StateFromStatus", status)
+		s.ChangeState(State_Start)
+	}
+}
+
+func (s Session) Dest() chatDestination {
+	return Dest(s.ChatID)
 }
 
 func (s *Session) Stop() {
@@ -53,9 +96,8 @@ func (s *Session) ChangeState(newState State) {
 	}
 	actions, ok = states[newState]
 	if !ok {
-		// hm?
-		// @TODO do something about it
 		log.Errorf("session %v tried to join unknown state %v", s.ChatID, newState)
+		s.Reload()
 		return
 	}
 	s.State = newState

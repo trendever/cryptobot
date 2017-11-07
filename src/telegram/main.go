@@ -6,6 +6,7 @@ import (
 	"common/log"
 	"common/rabbit"
 	"common/stopper"
+	"fmt"
 	"github.com/tucnak/telebot"
 	"sync"
 	"time"
@@ -94,6 +95,7 @@ func Listen() {
 				session, err = LoadSession(message.Chat.ID)
 				if err != nil {
 					log.Errorf("failed to load session for chat %v: %v", message.Chat.ID, err)
+					log.Error(SendMessage(Dest(message.Chat.ID), fmt.Sprintf(M("service unavailable"), err), nil))
 					continue
 				}
 				// @TODO unload session on timeout?

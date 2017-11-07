@@ -2,17 +2,9 @@ package main
 
 import (
 	"common/db"
+	"core/proto"
 	"github.com/shopspring/decimal"
 	"lbapi"
-)
-
-type AccountStatus int
-
-const (
-	AccountStatus_Ready    AccountStatus = 0
-	AccountStatus_Busy     AccountStatus = 1
-	AccountStatus_Disabled AccountStatus = 2
-	AccountStatus_Invalid  AccountStatus = 3
 )
 
 type TransactionDirection int
@@ -26,10 +18,10 @@ type Operator struct {
 	db.Model
 	// from localbitcoins
 	Username string `gorm:"unique_index"`
-	Status   AccountStatus
+	Status   proto.OperatorStatus
 	lbapi.Key
 
-	TelegramChat uint64          `gorm:"unique_index"`
+	TelegramChat int64           `gorm:"unique_index"`
 	Deposit      decimal.Decimal `gorm:"type:decimal;index"`
 	Note         string          `gorm:"text"`
 }

@@ -10,6 +10,7 @@ import (
 
 func init() {
 	rabbit.ServeRPC(proto.CheckKey, CheckKey)
+	rabbit.ServeRPC(proto.OperatorByTg, OperatorByTg)
 }
 
 func CheckKey(key lbapi.Key) (proto.Operator, error) {
@@ -22,8 +23,8 @@ func CheckKey(key lbapi.Key) (proto.Operator, error) {
 		return proto.Operator{}, err
 	}
 
-	var operator Operator
-	scope := db.New().First(&operator, "username = ?", acc.Username)
+	var op Operator
+	scope := db.New().First(&op, "username = ?", acc.Username)
 	switch {
 	case scope.RecordNotFound():
 		return proto.Operator{
@@ -34,8 +35,21 @@ func CheckKey(key lbapi.Key) (proto.Operator, error) {
 	}
 
 	return proto.Operator{
-		ID:           operator.ID,
+		ID:           op.ID,
 		Username:     acc.Username,
-		TelegramChat: operator.TelegramChat,
+		TelegramChat: op.TelegramChat,
+		Status:       op.Status,
 	}, nil
+}
+
+func OperatorByTg(chatID int64) (proto.Operator, error) {
+	var op Operator
+	err := db.New().First(&op, "chat_id = ?", chatID).Error
+	// It's fine to return empty value.
+	return proto.Operator{
+		ID:           op.ID,
+		Username:     op.Username,
+		TelegramChat: chatID,
+		Status:       op.Status,
+	}, err
 }
