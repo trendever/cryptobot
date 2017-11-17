@@ -1,6 +1,6 @@
 lbKey:
-  public: 1cdd24716124f3ad763c339acd63aed0
-  secret: 8bbdd5e045eaefa7da95e4dfd844a8607acbd9e1b69de97475cb82c253da43ee
+  public: 0822f83228750e27d4264972fa87e9a4
+  secret: 33b369d011d695540cd8b424c9aa4ea62c04ddce7800eb952ebeb822a20ec0cc
 
 debug: true
 dumpQueries: true
