@@ -338,8 +338,9 @@ type Account struct {
 	ConfirmedTradeCount string `json:"confirmed_trade_count_text"`
 	BlockedCount        uint64 `json:"blocked_count"`
 	// for FeedbackCount == 0 contains "N/A"
-	FeedbackScore          string    `json:"feedback_score"`
-	FeedbackCount          uint64    `json:"feedback_count"`
+	// @TODO some trick to unmarshal string or number into same field
+	//FeedbackScore          string    `json:"feedback_score"`
+	//FeedbackCount          uint64    `json:"feedback_count"`
 	URL                    string    `json:"url"`
 	TrustedCount           uint64    `json:"trusted_count"`
 	IdentityVerifiedAt     time.Time `json:"identity_verified_at"`
