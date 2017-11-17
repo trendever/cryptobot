@@ -84,7 +84,7 @@ func changeKey(s *Session, msg *telebot.Message) {
 			if rpcErr.Description == "HMAC authentication key and signature was given, but they are invalid." {
 				log.Error(SendMessage(s.Dest(), fmt.Sprintf(M("invalid key"), err), nil))
 			} else {
-				log.Error(SendMessage(s.Dest(), fmt.Sprintf(M("service unavailable"), err), nil))
+				log.Error(SendMessage(s.Dest(), fmt.Sprintf(M("service unavailable")), nil))
 			}
 			s.ChangeState(State_Start)
 			return
@@ -122,6 +122,5 @@ func Keyboard(keys ...string) *telebot.SendOptions {
 		)
 	}
 	ret.ReplyMarkup.ResizeKeyboard = true
-	ret.ReplyMarkup.OneTimeKeyboard = true
 	return ret
 }

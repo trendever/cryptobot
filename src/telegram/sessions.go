@@ -8,10 +8,8 @@ import (
 )
 
 type Session struct {
-	UserID uint64
-	ChatID int64 `gorm:"primary_key"`
-	LBName string
-	State  State
+	Operator proto.Operator
+	State    State
 	// per state context, clears on state change
 	// @CHECK may map[string]string be better choice?
 	context interface{}
@@ -21,9 +19,9 @@ type Session struct {
 
 func NewSession(chatID int64) *Session {
 	s := &Session{
-		UserID:  0,
-		ChatID:  chatID,
-		LBName:  "",
+		Operator: proto.Operator{
+			TelegramChat: chatID,
+		},
 		inbox:   make(chan telebot.Message, 4),
 		State:   State_Start,
 		stopper: stopper.NewStopper(),
@@ -39,12 +37,10 @@ func LoadSession(chatID int64) (*Session, error) {
 		return NewSession(chatID), err
 	}
 	ses := &Session{
-		UserID:  op.ID,
-		ChatID:  chatID,
-		LBName:  op.Username,
-		State:   State_Start,
-		inbox:   make(chan telebot.Message, 4),
-		stopper: stopper.NewStopper(),
+		Operator: op,
+		State:    State_Start,
+		inbox:    make(chan telebot.Message, 4),
+		stopper:  stopper.NewStopper(),
 	}
 	ses.StateFromStatus(op.Status)
 	return ses, nil
@@ -55,12 +51,12 @@ func (s *Session) PushMessage(msg telebot.Message) {
 }
 
 func (s *Session) Reload() {
-	op, err := OperatorByTd(s.ChatID)
+	op, err := OperatorByTd(s.Operator.TelegramChat)
 	if err != nil {
-		log.Errorf("failed to reload session for chat %v: %v", s.ChatID, err)
+		log.Errorf("failed to reload session for chat %v: %v", s.Operator.TelegramChat, err)
 		return
 	}
-	s.LBName = op.Username
+	s.Operator = op
 	s.StateFromStatus(op.Status)
 }
 
@@ -79,7 +75,7 @@ func (s *Session) StateFromStatus(status proto.OperatorStatus) {
 }
 
 func (s Session) Dest() chatDestination {
-	return Dest(s.ChatID)
+	return Dest(s.Operator.TelegramChat)
 }
 
 func (s *Session) Stop() {
@@ -96,7 +92,7 @@ func (s *Session) ChangeState(newState State) {
 	}
 	actions, ok = states[newState]
 	if !ok {
-		log.Errorf("session %v tried to join unknown state %v", s.ChatID, newState)
+		log.Errorf("session %v tried to join unknown state %v", s.Operator.TelegramChat, newState)
 		s.Reload()
 		return
 	}
