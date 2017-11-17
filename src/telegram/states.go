@@ -3,24 +3,29 @@ package main
 import (
 	"common/log"
 	"common/rabbit"
+	"core/proto"
 	"fmt"
 	"github.com/tucnak/telebot"
 	"lbapi"
 	"strconv"
+	"time"
 )
 
 type State int
 
 const (
 	State_Start State = iota
+	State_Unavailable
 	State_ChangeKey
+	State_InterruptedAction
 )
 
+const ReloadTimeout = 3 * time.Second
+
 type StateActions struct {
-	Enter       func(s *Session)
-	Message     func(s *Session, msg *telebot.Message)
-	Exit        func(s *Session)
-	Recoverable bool
+	Enter   func(s *Session)
+	Message func(s *Session, msg *telebot.Message)
+	Exit    func(s *Session)
 }
 
 var states map[State]StateActions
@@ -34,23 +39,68 @@ func init() {
 var statesInit = map[State]StateActions{
 	State_Start: {
 		Enter: func(s *Session) {
+			if s.Operator.ID != 0 {
+				status := proto.OperatorStatus_None
+				if s.Operator.HasValidKey {
+					status = proto.OperatorStatus_Inactive
+				}
+				err := s.SetOperatorStatus(status)
+				if err != nil {
+
+				}
+			}
 			log.Error(SendMessage(s.Dest(), M("start"), Keyboard(M("set key"))))
 		},
 		Message: func(s *Session, msg *telebot.Message) {
 			switch msg.Text {
 			case M("set key"):
+
 				s.ChangeState(State_ChangeKey)
 				return
 			}
 			log.Error(SendMessage(s.Dest(), M("start"), Keyboard(M("set key"))))
 		},
-		Recoverable: true,
+	},
+	State_Unavailable: {
+		Enter: func(s *Session) {
+			log.Error(SendMessage(s.Dest(), fmt.Sprintf(M("service unavailable")), Keyboard(
+				M("reload"),
+			)))
+		},
+		Message: func(s *Session, msg *telebot.Message) {
+			// ignore any unexpected messages
+			if msg.Text != M("reload") {
+				return
+			}
+			now := time.Now()
+			if s.context != nil {
+				lastTry := s.context.(time.Time)
+				if now.Sub(lastTry) < ReloadTimeout {
+					return
+				}
+			}
+			err := s.Reload()
+			if err != nil {
+				s.context = now
+			}
+		},
 	},
 	State_ChangeKey: {
 		Enter: func(s *Session) {
+			err := s.SetOperatorStatus(proto.OperatorStatus_Utility)
+			if err != nil {
+				s.ChangeState(State_Unavailable)
+				return
+			}
 			log.Error(SendMessage(s.Dest(), M("input public key"), Keyboard(M("cancel"))))
 		},
 		Message: changeKey,
+	},
+	State_InterruptedAction: {
+		Message: func(s *Session, msg *telebot.Message) {
+			log.Error(SendMessage(s.Dest(), M("session was interrupted"), nil))
+			s.ChangeState(State_Start)
+		},
 	},
 }
 
@@ -83,12 +133,19 @@ func changeKey(s *Session, msg *telebot.Message) {
 			rpcErr := err.(rabbit.RPCError)
 			if rpcErr.Description == "HMAC authentication key and signature was given, but they are invalid." {
 				log.Error(SendMessage(s.Dest(), fmt.Sprintf(M("invalid key"), err), nil))
+				s.ChangeState(State_Start)
 			} else {
 				log.Errorf("got unexpected error from CheckKey rpc: %v", err)
-				log.Error(SendMessage(s.Dest(), fmt.Sprintf(M("service unavailable")), nil))
+				s.ChangeState(State_Unavailable)
 			}
-			s.ChangeState(State_Start)
 			return
+		}
+
+		s.ChangeState(State_Unavailable)
+		return
+
+		if s.Operator.ID != 0 && op.ID != s.Operator.ID {
+
 		}
 
 		log.Error(SendMessage(s.Dest(), fmt.Sprintf(M("check key: %v"), op), nil))

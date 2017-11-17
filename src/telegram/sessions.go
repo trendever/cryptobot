@@ -34,10 +34,7 @@ func NewSession(chatID int64) *Session {
 func LoadSession(chatID int64) (*Session, error) {
 	op, err := OperatorByTd(chatID)
 	if err != nil {
-		if err.Error() != "record not found" {
-			return NewSession(chatID), err
-		}
-		return NewSession(chatID), nil
+		return NewSession(chatID), err
 	}
 	ses := &Session{
 		Operator: op,
@@ -45,6 +42,9 @@ func LoadSession(chatID int64) (*Session, error) {
 		inbox:    make(chan telebot.Message, 4),
 		stopper:  stopper.NewStopper(),
 	}
+	ses.Operator.TelegramChat = chatID
+	global.waitGroup.Add(1)
+	go ses.loop()
 	ses.StateFromStatus(op.Status)
 	return ses, nil
 }
@@ -53,14 +53,15 @@ func (s *Session) PushMessage(msg telebot.Message) {
 	s.inbox <- msg
 }
 
-func (s *Session) Reload() {
+func (s *Session) Reload() error {
 	op, err := OperatorByTd(s.Operator.TelegramChat)
 	if err != nil {
 		log.Errorf("failed to reload session for chat %v: %v", s.Operator.TelegramChat, err)
-		return
+		return err
 	}
 	s.Operator = op
 	s.StateFromStatus(op.Status)
+	return nil
 }
 
 func (s *Session) StateFromStatus(status proto.OperatorStatus) {
@@ -71,10 +72,26 @@ func (s *Session) StateFromStatus(status proto.OperatorStatus) {
 		// @TODO
 	case proto.OperatorStatus_Busy:
 		// @TODO
+	case proto.OperatorStatus_Utility:
+		s.ChangeState(State_InterruptedAction)
 	default:
 		log.Errorf("unknown operator status %v in StateFromStatus", status)
 		s.ChangeState(State_Start)
 	}
+}
+
+func (s *Session) SetOperatorStatus(status proto.OperatorStatus) error {
+	if s.Operator.ID == 0 {
+		return nil
+	}
+	_, err := SetOperatorStatus(proto.SetOperatorStatusRequest{
+		ChatID: s.Operator.TelegramChat,
+		Status: status,
+	})
+	if err == nil {
+		s.Operator.Status = status
+	}
+	return err
 }
 
 func (s Session) Dest() chatDestination {
@@ -96,7 +113,10 @@ func (s *Session) ChangeState(newState State) {
 	actions, ok = states[newState]
 	if !ok {
 		log.Errorf("session %v tried to join unknown state %v", s.Operator.TelegramChat, newState)
-		s.Reload()
+		err := s.Reload()
+		if err != nil {
+			s.ChangeState(State_Unavailable)
+		}
 		return
 	}
 	s.State = newState
@@ -104,25 +124,23 @@ func (s *Session) ChangeState(newState State) {
 	if actions.Enter != nil {
 		actions.Enter(s)
 	}
-	// @TODO save state here?
 }
 
 func (s *Session) loop() {
+	defer global.waitGroup.Done()
 	for {
 		select {
 		case <-global.stopper.Chan():
-			global.waitGroup.Done()
 			return
 		case <-s.stopper.Chan():
-			global.waitGroup.Done()
 			return
 		case msg := <-s.inbox:
 			actions, ok := states[s.State]
 			if !ok {
-				// @TODO reload session?
-				actions = states[State_Start]
+				s.ChangeState(State_Unavailable)
+			} else {
+				actions.Message(s, &msg)
 			}
-			actions.Message(s, &msg)
 		}
 	}
 }
