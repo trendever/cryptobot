@@ -34,7 +34,10 @@ func NewSession(chatID int64) *Session {
 func LoadSession(chatID int64) (*Session, error) {
 	op, err := OperatorByTd(chatID)
 	if err != nil {
-		return NewSession(chatID), err
+		if err.Error() != "record not found" {
+			return NewSession(chatID), err
+		}
+		return NewSession(chatID), nil
 	}
 	ses := &Session{
 		Operator: op,

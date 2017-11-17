@@ -44,7 +44,7 @@ func CheckKey(key lbapi.Key) (proto.Operator, error) {
 
 func OperatorByTg(chatID int64) (proto.Operator, error) {
 	var op Operator
-	err := db.New().First(&op, "chat_id = ?", chatID).Error
+	err := db.New().First(&op, "telegram_chat = ?", chatID).Error
 	// It's fine to return empty value.
 	return proto.Operator{
 		ID:           op.ID,
