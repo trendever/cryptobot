@@ -18,6 +18,7 @@ const (
 	State_Unavailable
 	State_ChangeKey
 	State_InterruptedAction
+	State_WaitForQuery
 )
 
 const ReloadTimeout = 3 * time.Second
@@ -46,21 +47,32 @@ var statesInit = map[State]StateActions{
 				}
 				err := s.SetOperatorStatus(status)
 				if err != nil {
-
+					s.ChangeState(State_Unavailable)
+					return
 				}
 			}
-			log.Error(SendMessage(s.Dest(), M("start"), Keyboard(M("set key"))))
+			log.Error(SendMessage(s.Dest(), M("start"), startKeyboard(s)))
 		},
+
 		Message: func(s *Session, msg *telebot.Message) {
+			// @TODO show deposit balance
 			switch msg.Text {
 			case M("set key"):
-
 				s.ChangeState(State_ChangeKey)
 				return
+
+			case M("help"):
+				log.Error(SendMessage(s.Dest(), M("help text"), nil))
+				return
+
+			case M("start serve"):
+				s.ChangeState(State_WaitForQuery)
+				return
 			}
-			log.Error(SendMessage(s.Dest(), M("start"), Keyboard(M("set key"))))
+			log.Error(SendMessage(s.Dest(), M("start"), startKeyboard(s)))
 		},
 	},
+
 	State_Unavailable: {
 		Enter: func(s *Session) {
 			log.Error(SendMessage(s.Dest(), fmt.Sprintf(M("service unavailable")), Keyboard(
@@ -70,6 +82,9 @@ var statesInit = map[State]StateActions{
 		Message: func(s *Session, msg *telebot.Message) {
 			// ignore any unexpected messages
 			if msg.Text != M("reload") {
+				log.Error(SendMessage(s.Dest(), fmt.Sprintf(M("service unavailable")), Keyboard(
+					M("reload"),
+				)))
 				return
 			}
 			now := time.Now()
@@ -85,6 +100,7 @@ var statesInit = map[State]StateActions{
 			}
 		},
 	},
+
 	State_ChangeKey: {
 		Enter: func(s *Session) {
 			err := s.SetOperatorStatus(proto.OperatorStatus_Utility)
@@ -96,12 +112,46 @@ var statesInit = map[State]StateActions{
 		},
 		Message: changeKey,
 	},
+
 	State_InterruptedAction: {
 		Message: func(s *Session, msg *telebot.Message) {
 			log.Error(SendMessage(s.Dest(), M("session was interrupted"), nil))
 			s.ChangeState(State_Start)
 		},
 	},
+
+	State_WaitForQuery: {
+		Enter: func(s *Session) {
+			err := s.SetOperatorStatus(proto.OperatorStatus_Ready)
+			if err != nil {
+				s.ChangeState(State_Unavailable)
+				return
+			}
+			log.Error(SendMessage(s.Dest(), M("wait for query"), Keyboard(M("cancel"))))
+		},
+
+		Message: func(s *Session, msg *telebot.Message) {
+			if msg.Text == M("cancel") {
+				s.ChangeState(State_Start)
+				return
+			}
+			log.Error(SendMessage(s.Dest(), M("wait for query"), Keyboard(M("cancel"))))
+		},
+	},
+}
+
+func startKeyboard(s *Session) *telebot.SendOptions {
+	keys := []string{
+		M("set key"),
+		M("help"),
+	}
+	if s.Operator.HasValidKey {
+		keys = append(
+			keys,
+			M("start serve"),
+		)
+	}
+	return Keyboard(keys...)
 }
 
 func changeKey(s *Session, msg *telebot.Message) {
@@ -141,14 +191,24 @@ func changeKey(s *Session, msg *telebot.Message) {
 			return
 		}
 
-		s.ChangeState(State_Unavailable)
-		return
+		log.Error(SendMessage(s.Dest(), fmt.Sprintf(M("key belogs to %v"), op.Username), nil))
 
 		if s.Operator.ID != 0 && op.ID != s.Operator.ID {
-
+			log.Error(SendMessage(s.Dest(), fmt.Sprintf(M("previos account tat was attached to this chat is %v"), s.Operator.Username), nil))
 		}
 
-		log.Error(SendMessage(s.Dest(), fmt.Sprintf(M("check key: %v"), op), nil))
+		op, err = SetOperatorKey(proto.SetOperatorKeyRequest{
+			ChatID: s.Operator.TelegramChat,
+			Key:    key,
+		})
+		if err != nil {
+			log.Errorf("failed to set lb key for chat %v: %v", s.Operator.TelegramChat, err)
+			s.ChangeState(State_Unavailable)
+			return
+		}
+
+		s.Operator = op
+		s.ChangeState(State_Start)
 	}
 }
 

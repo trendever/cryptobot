@@ -113,6 +113,7 @@ func (s *Session) ChangeState(newState State) {
 	actions, ok = states[newState]
 	if !ok {
 		log.Errorf("session %v tried to join unknown state %v", s.Operator.TelegramChat, newState)
+		log.Error(SendMessage(s.Dest(), M("internal error"), nil))
 		err := s.Reload()
 		if err != nil {
 			s.ChangeState(State_Unavailable)
@@ -123,6 +124,17 @@ func (s *Session) ChangeState(newState State) {
 	s.context = nil
 	if actions.Enter != nil {
 		actions.Enter(s)
+	}
+}
+
+func (s *Session) ReceiveMessage() *telebot.Message {
+	select {
+	case <-global.stopper.Chan():
+		return nil
+	case <-s.stopper.Chan():
+		return nil
+	case msg := <-s.inbox:
+		return &msg
 	}
 }
 

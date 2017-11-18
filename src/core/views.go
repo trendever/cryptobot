@@ -79,9 +79,9 @@ func SetOperatorStatus(req proto.SetOperatorStatusRequest) (bool, error) {
 	}
 	// @TODO Ability to change status should depend no current status actuality
 	op.Status = req.Status
-	err = db.New().Update(&op).Error
+	err = db.New().Save(&op).Error
 	if err != nil {
-		return false, db.New().Save(&op).Error
+		return false, err
 	}
 	return true, nil
 }
@@ -118,7 +118,7 @@ func SetOperatorKey(req proto.SetOperatorKeyRequest) (proto.Operator, error) {
 
 	err = db.New().Save(&op).Error
 	if err != nil {
-		return proto.Operator{}, scope.Error
+		return proto.Operator{}, err
 	}
 
 	return proto.Operator{
