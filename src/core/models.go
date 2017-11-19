@@ -31,3 +31,18 @@ type LBTransaction struct {
 	Direction TransactionDirection
 	lbapi.Transaction
 }
+
+type Order struct {
+	db.Model
+	ClientName string
+	// Bitshares address
+	Destination    string
+	PaymentMethods string
+	Currency       string
+	// In currency above
+	FiatAmount decimal.Decimal
+	// Value of lb contract
+	LBAmount decimal.Decimal
+	// @TODO commission-related fields?
+	Status proto.OrderStatus
+}

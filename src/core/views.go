@@ -77,7 +77,11 @@ func SetOperatorStatus(req proto.SetOperatorStatusRequest) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	// @TODO Ability to change status should depend no current status actuality
+	if op.Status == proto.OperatorStatus_Busy {
+		if err != nil {
+			return false, errors.New("operator is busy")
+		}
+	}
 	op.Status = req.Status
 	err = db.New().Save(&op).Error
 	if err != nil {

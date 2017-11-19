@@ -8,6 +8,7 @@ import (
 var models = []interface{}{
 	&LBTransaction{},
 	&Operator{},
+	&Order{},
 }
 
 func migrate(drop bool) {
