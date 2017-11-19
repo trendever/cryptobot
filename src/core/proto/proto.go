@@ -15,9 +15,11 @@ const (
 	OperatorStatus_Inactive OperatorStatus = 1
 	// Account is ready to accept offers.
 	OperatorStatus_Ready OperatorStatus = 2
+	// Waiting for accent/reject offer
+	OperatorStatus_Proposal OperatorStatus = 4
 	// In action
-	OperatorStatus_Busy    OperatorStatus = 3
-	OperatorStatus_Utility OperatorStatus = 4
+	OperatorStatus_Busy    OperatorStatus = 5
+	OperatorStatus_Utility OperatorStatus = 6
 )
 
 type Operator struct {
@@ -86,13 +88,14 @@ type Order struct {
 	ID         uint64
 	ClientName string
 	// Bitshares address
-	Destination    string
-	PaymentMethods string
-	Currency       string
+	Destination   string
+	PaymentMethod string
+	Currency      string
 	// In currency above
 	FiatAmount decimal.Decimal
 	// Value of lb contract
 	LBAmount decimal.Decimal
 	// @TODO commission-related fields?
-	Status OrderStatus
+	Status     OrderStatus
+	OperatorID uint64
 }

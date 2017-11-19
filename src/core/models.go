@@ -36,13 +36,14 @@ type Order struct {
 	db.Model
 	ClientName string
 	// Bitshares address
-	Destination    string
-	PaymentMethods string
-	Currency       string
+	Destination   string
+	PaymentMethod string
+	Currency      string
 	// In currency above
 	FiatAmount decimal.Decimal
 	// Value of lb contract
 	LBAmount decimal.Decimal
 	// @TODO commission-related fields?
-	Status proto.OrderStatus
+	Status     proto.OrderStatus
+	OperatorID uint64
 }

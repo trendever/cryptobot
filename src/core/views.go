@@ -2,6 +2,7 @@ package main
 
 import (
 	"common/db"
+	"common/log"
 	"common/rabbit"
 	"core/proto"
 	"errors"
@@ -132,4 +133,30 @@ func SetOperatorKey(req proto.SetOperatorKeyRequest) (proto.Operator, error) {
 		Status:       op.Status,
 		HasValidKey:  true,
 	}, nil
+}
+
+func CreateOrder(req proto.Order) (proto.Order, error) {
+	if req.ClientName == "" {
+		return proto.Order{}, errors.New("empty client name")
+	}
+	if req.FiatAmount.Sign() <= 0 {
+		return proto.Order{}, errors.New("invalid fiat amount")
+	}
+	// @TODO Check currency
+	// @TODO Check payment method
+	// @TODO Lock something on bitshares buffer? It will depend on current exchange rates
+	order := Order{
+		ClientName:    req.ClientName,
+		PaymentMethod: req.PaymentMethod,
+		Currency:      req.Currency,
+		FiatAmount:    req.FiatAmount,
+		Status:        proto.OrderStatus_New,
+	}
+	err := db.New().Save(&order).Error
+	if err != nil {
+		log.Errorf("failed to save new order: %v", err)
+		return proto.Order{}, errors.New("db error")
+	}
+
+	return proto.Order{}, nil
 }
