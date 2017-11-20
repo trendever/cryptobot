@@ -164,6 +164,10 @@ type Advertisement struct {
 		// often?
 		TradeType string `json:"trade_type"`
 		Currency  string `json:"currency"`
+		// in currency above
+		TempPrice decimal.Decimal `json:"temp_price"`
+		// current price per BTC in USD
+		TempPriceUSD decimal.Decimal `json:"temp_price_usd"`
 		// it is payment method actuality. "SPECIFIC_BANK"/"QIWI"/"INTERNATIONAL_WIRE_SWIFT"/etc
 		OnlineProvider string `json:"online_provider"`
 		// there is no specific format
@@ -183,8 +187,6 @@ type Advertisement struct {
 		// >"5,10,20"
 		// wtf?
 		LimitToFiatAmounts string `json:"limit_to_fiat_amounts"`
-		// current price per BTC in USD
-		TempPriceUSD decimal.Decimal `json:"temp_price_usd"`
 		// >boolean if LOCAL_SELL
 		// wat?
 		Floating bool `json:"floating"`
@@ -193,8 +195,8 @@ type Advertisement struct {
 			Username   string    `json:"username"`
 			LastOnline time.Time `json:"last_online"`
 			// can contain bs values like "N/A" or "10 000+"
-			TradeCount    string `json:"trade_count"`
-			FeedbackScore string `json:"feedback_score"`
+			TradeCount    string  `json:"trade_count"`
+			FeedbackScore float32 `json:"feedback_score"`
 			// >username, trade count and feedback score combined
 			Combined string `json:"name"`
 		} `json:"profile"`
