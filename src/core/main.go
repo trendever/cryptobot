@@ -30,6 +30,8 @@ var conf struct {
 	SentryDSN string
 }
 
+var CurrencyList []string
+
 type service struct{}
 
 func main() {
@@ -75,8 +77,13 @@ func (srv service) Start() {
 	if err != nil {
 		log.Fatalf("failed to init-check buffer wallet: %v", err)
 	}
+	// I think load it just on start will be enough
+	CurrencyList, err = conf.LBKey.CurrencyList()
+	if err != nil {
+		log.Fatalf("failed to load currency list: %v", err)
+	}
 
 	rabbit.Start(&conf.Rabbit)
 
-	go LBCheckLoop()
+	go LBTransactionsLoop()
 }

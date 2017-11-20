@@ -12,7 +12,7 @@ import (
 
 const DepositTransactionPrefix = "DEPO."
 
-func LBCheckLoop() {
+func LBTransactionsLoop() {
 	for range time.Tick(conf.lbCheckTick) {
 		wallet, err := conf.LBKey.Wallet()
 		if err != nil {

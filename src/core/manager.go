@@ -20,7 +20,7 @@ func (man *orderManager) loop() {
 	for {
 		select {
 		case order := <-man.orders:
-
+			_ = order
 		case op := <-man.operators:
 			for _, order := range man.waiters {
 				if op.Deposit.Cmp(order.LBAmount) > 0 {

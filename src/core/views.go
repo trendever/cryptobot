@@ -142,7 +142,17 @@ func CreateOrder(req proto.Order) (proto.Order, error) {
 	if req.FiatAmount.Sign() <= 0 {
 		return proto.Order{}, errors.New("invalid fiat amount")
 	}
-	// @TODO Check currency
+	valid := false
+	for _, cur := range CurrencyList {
+		if cur == req.Currency {
+			valid = true
+			break
+		}
+	}
+	if !valid {
+		return proto.Order{}, errors.New("unknown currency")
+	}
+
 	// @TODO Check payment method
 	// @TODO Lock something on bitshares buffer? It will depend on current exchange rates
 	order := Order{
