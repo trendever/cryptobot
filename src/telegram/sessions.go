@@ -14,6 +14,7 @@ type Session struct {
 	// @CHECK may map[string]string be better choice?
 	context interface{}
 	inbox   chan telebot.Message
+	events  chan interface{}
 	stopper *stopper.Stopper
 }
 
@@ -22,7 +23,8 @@ func NewSession(chatID int64) *Session {
 		Operator: proto.Operator{
 			TelegramChat: chatID,
 		},
-		inbox:   make(chan telebot.Message, 4),
+		inbox:   make(chan telebot.Message, 8),
+		events:  make(chan interface{}, 8),
 		State:   State_Start,
 		stopper: stopper.NewStopper(),
 	}
@@ -39,7 +41,8 @@ func LoadSession(chatID int64) (*Session, error) {
 	ses := &Session{
 		Operator: op,
 		State:    State_Start,
-		inbox:    make(chan telebot.Message, 4),
+		inbox:    make(chan telebot.Message, 8),
+		events:   make(chan interface{}, 8),
 		stopper:  stopper.NewStopper(),
 	}
 	ses.Operator.TelegramChat = chatID
@@ -51,6 +54,10 @@ func LoadSession(chatID int64) (*Session, error) {
 
 func (s *Session) PushMessage(msg telebot.Message) {
 	s.inbox <- msg
+}
+
+func (s *Session) PushEvent(event interface{}) {
+	s.events <- event
 }
 
 func (s *Session) Reload() error {
@@ -69,7 +76,7 @@ func (s *Session) StateFromStatus(status proto.OperatorStatus) {
 	case proto.OperatorStatus_None, proto.OperatorStatus_Inactive:
 		s.ChangeState(State_Start)
 	case proto.OperatorStatus_Ready:
-		// @TODO
+		s.ChangeState(State_WaitForOrders)
 	case proto.OperatorStatus_Busy:
 		// @TODO
 	case proto.OperatorStatus_Utility:
@@ -122,6 +129,7 @@ func (s *Session) ChangeState(newState State) {
 	}
 	s.State = newState
 	s.context = nil
+	s.ClearInbox()
 	if actions.Enter != nil {
 		actions.Enter(s)
 	}
@@ -135,6 +143,16 @@ func (s *Session) ReceiveMessage() *telebot.Message {
 		return nil
 	case msg := <-s.inbox:
 		return &msg
+	}
+}
+
+func (s *Session) ClearInbox() {
+	for {
+		select {
+		case <-s.inbox:
+		default:
+			return
+		}
 	}
 }
 
@@ -152,6 +170,17 @@ func (s *Session) loop() {
 				s.ChangeState(State_Unavailable)
 			} else {
 				actions.Message(s, &msg)
+			}
+		case event := <-s.events:
+			actions, ok := states[s.State]
+			switch {
+			case !ok:
+				s.ChangeState(State_Unavailable)
+			case actions.Event == nil:
+				// No events expected in this state, drop it
+			default:
+				actions.Event(s, event)
+
 			}
 		}
 	}

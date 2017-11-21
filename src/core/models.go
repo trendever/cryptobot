@@ -24,6 +24,9 @@ type Operator struct {
 	TelegramChat int64           `gorm:"unique_index"`
 	Deposit      decimal.Decimal `gorm:"type:decimal;index"`
 	Note         string          `gorm:"text"`
+
+	// @TODO extra consistency checks in db?
+	CurrentOrder uint64 `gorm:"index"`
 }
 
 type LBTransaction struct {
@@ -40,10 +43,23 @@ type Order struct {
 	PaymentMethod string
 	Currency      string
 	// In currency above
-	FiatAmount decimal.Decimal
+	FiatAmount decimal.Decimal `gorm:"type:decimal"`
 	// Value of lb contract
-	LBAmount decimal.Decimal
+	LBAmount decimal.Decimal `gorm:"type:decimal"`
 	// @TODO commission-related fields?
 	Status     proto.OrderStatus
 	OperatorID uint64
+}
+
+func (order Order) Encode() proto.Order {
+	return proto.Order{
+		ID:          order.ID,
+		ClientName:  order.ClientName,
+		Destination: order.Destination,
+		Currency:    order.Currency,
+		FiatAmount:  order.FiatAmount,
+		LBAmount:    order.LBAmount,
+		Status:      order.Status,
+		OperatorID:  order.OperatorID,
+	}
 }

@@ -4,6 +4,7 @@ import (
 	"common/rabbit"
 	"github.com/shopspring/decimal"
 	"lbapi"
+	"time"
 )
 
 type OperatorStatus int
@@ -98,4 +99,30 @@ type Order struct {
 	// @TODO commission-related fields?
 	Status     OrderStatus
 	OperatorID uint64
+}
+
+var CreateOrder = rabbit.RPC{
+	Name:        "create_order",
+	HandlerType: (func(Order) (Order, error))(nil),
+	Timeout:     time.Second * 5,
+}
+
+type AcceptOfferRequest struct {
+	OperatorID uint64
+	OrderID    uint64
+}
+
+var AcceptOffer = rabbit.RPC{
+	Name:        "accept_offer",
+	HandlerType: (func(AcceptOfferRequest) (bool, error))(nil),
+}
+
+type SkipOfferRequest struct {
+	OperatorID uint64
+	OrderID    uint64
+}
+
+var SkipOffer = rabbit.RPC{
+	Name:        "skip_offer",
+	HandlerType: (func(SkipOfferRequest) (bool, error))(nil),
 }

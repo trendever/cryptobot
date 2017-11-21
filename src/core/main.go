@@ -20,11 +20,12 @@ var conf struct {
 	Debug       bool
 	DumpQueries bool
 
+	Messages map[string]string
+
 	LBCheckTick string
 	lbCheckTick time.Duration
 
-	DB db.Settings
-
+	DB     db.Settings
 	Rabbit rabbit.Config
 
 	SentryDSN string
@@ -86,4 +87,14 @@ func (srv service) Start() {
 	rabbit.Start(&conf.Rabbit)
 
 	go LBTransactionsLoop()
+	StartOrderManager()
+}
+
+func M(key string) string {
+	msg, ok := conf.Messages[key]
+	if ok {
+		return msg
+	}
+	log.Warn("message for key '%v' is undefined", key)
+	return key
 }

@@ -15,6 +15,9 @@ func init() {
 	rabbit.ServeRPC(proto.OperatorByTg, OperatorByTg)
 	rabbit.ServeRPC(proto.SetOperatorStatus, SetOperatorStatus)
 	rabbit.ServeRPC(proto.SetOperatorKey, SetOperatorKey)
+	rabbit.ServeRPC(proto.CreateOrder, CreateOrder)
+	rabbit.ServeRPC(proto.AcceptOffer, AcceptOffer)
+	rabbit.ServeRPC(proto.SkipOffer, SkipOffer)
 }
 
 func CheckKey(key lbapi.Key) (proto.Operator, error) {
@@ -82,6 +85,9 @@ func SetOperatorStatus(req proto.SetOperatorStatusRequest) (bool, error) {
 		if err != nil {
 			return false, errors.New("operator is busy")
 		}
+	}
+	if op.Status == proto.OperatorStatus_Ready {
+		op.CurrentOrder = 0
 	}
 	op.Status = req.Status
 	err = db.New().Save(&op).Error
@@ -153,20 +159,39 @@ func CreateOrder(req proto.Order) (proto.Order, error) {
 		return proto.Order{}, errors.New("unknown currency")
 	}
 
+	node, err := GetExchangeRate(req.Currency)
+	if err != nil {
+		return proto.Order{}, errors.New("failed to determine exchange rate")
+	}
+
 	// @TODO Check payment method
-	// @TODO Lock something on bitshares buffer? It will depend on current exchange rates
+	// @TODO Check destination
+	// @TODO Lock something on bitshares buffer? May be on later step
 	order := Order{
 		ClientName:    req.ClientName,
 		PaymentMethod: req.PaymentMethod,
 		Currency:      req.Currency,
 		FiatAmount:    req.FiatAmount,
 		Status:        proto.OrderStatus_New,
+		// At this point it only determines required deposit. So we will refer to the best offer.
+		LBAmount: req.FiatAmount.Div(node.Minimal),
 	}
-	err := db.New().Save(&order).Error
+	err = db.New().Save(&order).Error
 	if err != nil {
 		log.Errorf("failed to save new order: %v", err)
 		return proto.Order{}, errors.New("db error")
 	}
 
-	return proto.Order{}, nil
+	manager.PushOrder(order)
+
+	return order.Encode(), nil
+}
+
+func AcceptOffer(req proto.AcceptOfferRequest) (bool, error) {
+	return true, manager.AcceptOffer(req.OperatorID, req.OrderID)
+}
+
+func SkipOffer(req proto.SkipOfferRequest) (bool, error) {
+	// @TODO
+	return false, errors.New("unimlemented")
 }

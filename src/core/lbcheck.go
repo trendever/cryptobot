@@ -3,6 +3,7 @@ package main
 import (
 	"common/db"
 	"common/log"
+	"fmt"
 	"github.com/jinzhu/gorm"
 	"lbapi"
 	"strconv"
@@ -81,7 +82,14 @@ func ProcessIncomingTx(event lbapi.Transaction) error {
 	if err != nil {
 		return err
 	}
-	// @TODO notify operator here
+	go func() {
+		err := SendTelegramNotify(op.TelegramChat, fmt.Sprintf(
+			M("balance notify %v"), event.Amount,
+		))
+		if err != nil {
+			log.Errorf("failed to send balance notify: %v", err)
+		}
+	}()
 	return nil
 }
 

@@ -18,7 +18,8 @@ const (
 	State_Unavailable
 	State_ChangeKey
 	State_InterruptedAction
-	State_WaitForQuery
+	State_WaitForOrders
+	State_ServeOrder
 )
 
 const ReloadTimeout = 3 * time.Second
@@ -26,6 +27,7 @@ const ReloadTimeout = 3 * time.Second
 type StateActions struct {
 	Enter   func(s *Session)
 	Message func(s *Session, msg *telebot.Message)
+	Event   func(s *Session, event interface{})
 	Exit    func(s *Session)
 }
 
@@ -66,7 +68,7 @@ var statesInit = map[State]StateActions{
 				return
 
 			case M("start serve"):
-				s.ChangeState(State_WaitForQuery)
+				s.ChangeState(State_WaitForOrders)
 				return
 			}
 			log.Error(SendMessage(s.Dest(), M("start"), startKeyboard(s)))
@@ -80,6 +82,7 @@ var statesInit = map[State]StateActions{
 			)))
 		},
 		Message: func(s *Session, msg *telebot.Message) {
+			s.ClearInbox()
 			// ignore any unexpected messages
 			if msg.Text != M("reload") {
 				log.Error(SendMessage(s.Dest(), fmt.Sprintf(M("service unavailable")), Keyboard(
@@ -120,22 +123,115 @@ var statesInit = map[State]StateActions{
 		},
 	},
 
-	State_WaitForQuery: {
+	State_WaitForOrders: {
 		Enter: func(s *Session) {
 			err := s.SetOperatorStatus(proto.OperatorStatus_Ready)
 			if err != nil {
 				s.ChangeState(State_Unavailable)
 				return
 			}
-			log.Error(SendMessage(s.Dest(), M("wait for query"), Keyboard(M("cancel"))))
+			log.Error(SendMessage(s.Dest(), M("wait for orders"), Keyboard(M("cancel"))))
 		},
 
 		Message: func(s *Session, msg *telebot.Message) {
-			if msg.Text == M("cancel") {
+			switch msg.Text {
+			case M("cancel"):
 				s.ChangeState(State_Start)
 				return
+			case M("accept"):
+				order, ok := s.context.(proto.Order)
+				if !ok {
+					log.Error(SendMessage(s.Dest(), M("there was no active offer"), Keyboard(M("cancel"))))
+					return
+				}
+				_, err := AcceptOffer(proto.AcceptOfferRequest{
+					OperatorID: s.Operator.ID,
+					OrderID:    order.ID,
+				})
+				if err != nil {
+					log.Error(SendMessage(s.Dest(), M(err.Error()), Keyboard(M("cancel"))))
+					return
+				}
+				s.ChangeState(State_ServeOrder)
+				return
+
+			case M("skip"):
+				order, ok := s.context.(proto.Order)
+				if !ok {
+					log.Error(SendMessage(s.Dest(), M("there was no active offer"), Keyboard(M("cancel"))))
+					return
+				}
+				_, err := SkipOffer(proto.SkipOfferRequest{
+					OperatorID: s.Operator.ID,
+					OrderID:    order.ID,
+				})
+				if err != nil {
+					log.Error(SendMessage(s.Dest(), M(err.Error()), Keyboard(M("cancel"))))
+					return
+				}
 			}
-			log.Error(SendMessage(s.Dest(), M("wait for query"), Keyboard(M("cancel"))))
+
+			log.Error(SendMessage(s.Dest(), M("wait for orders"), Keyboard(M("cancel"))))
+		},
+
+		Event: func(s *Session, event interface{}) {
+			order, ok := event.(proto.Order)
+			if !ok {
+				return
+			}
+			switch order.Status {
+			case proto.OrderStatus_New:
+				log.Error(SendMessage(
+					s.Dest(),
+					fmt.Sprintf(M("new order %v from %v for an amount %v%v"), order.ID, order.ClientName, order.FiatAmount, order.Currency),
+					Keyboard(M("accept"), M("skip")),
+				))
+				s.context = order
+			case proto.OrderStatus_Accepted:
+				log.Error(SendMessage(
+					s.Dest(),
+					fmt.Sprintf(M("order %v was taken by another operators"), order.ID),
+					Keyboard(M("cancel")),
+				))
+				s.context = nil
+			case proto.OrderStatus_Rejected:
+				log.Error(SendMessage(
+					s.Dest(),
+					fmt.Sprintf(M("order %v was rejected on timeout"), order.ID),
+					Keyboard(M("cancel")),
+				))
+				s.context = nil
+			case proto.OrderStatus_Canceled:
+				log.Error(SendMessage(
+					s.Dest(),
+					fmt.Sprintf(M("order %v was canceled by client"), order.ID),
+					Keyboard(M("cancel")),
+				))
+				s.context = nil
+			default:
+				log.Warn("got order %v with unxepected status %v in WaitForOrders", order.ID, order.Status)
+				if s.context == nil {
+					return
+				}
+				ctx, ok := s.context.(proto.Order)
+				if !ok || ctx.ID != order.ID {
+					return
+				}
+				log.Error(SendMessage(
+					s.Dest(),
+					fmt.Sprintf(M("order %v entered unexped state"), order.ID),
+					Keyboard(M("cancel")),
+				))
+				s.context = nil
+			}
+		},
+	},
+
+	State_ServeOrder: {
+		Enter: func(s *Session) {
+			log.Error(SendMessage(s.Dest(), M("ok"), nil))
+			// @TODO
+			s.ChangeState(State_Start)
 		},
 	},
 }
