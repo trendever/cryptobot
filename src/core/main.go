@@ -72,7 +72,7 @@ func (srv service) Start() {
 	lbapi.HTTPCli = &http.Client{
 		Transport: transport,
 	}
-	lbapi.DumpQueries = conf.Debug
+	lbapi.DumpQueries = conf.DumpQueries
 
 	_, err = conf.LBKey.Wallet()
 	if err != nil {

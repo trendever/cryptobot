@@ -3,6 +3,7 @@ package main
 import (
 	"common/db"
 	"common/log"
+	"core/proto"
 	"fmt"
 	"github.com/jinzhu/gorm"
 	"lbapi"
@@ -82,6 +83,10 @@ func ProcessIncomingTx(event lbapi.Transaction) error {
 	if err != nil {
 		return err
 	}
+	if op.Status == proto.OperatorStatus_Ready {
+		manager.PushOperator(op)
+	}
+
 	go func() {
 		err := SendTelegramNotify(op.TelegramChat, fmt.Sprintf(
 			M("balance notify %v"), event.Amount,

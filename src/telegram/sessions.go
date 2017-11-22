@@ -48,7 +48,7 @@ func LoadSession(chatID int64) (*Session, error) {
 	ses.Operator.TelegramChat = chatID
 	global.waitGroup.Add(1)
 	go ses.loop()
-	ses.StateFromStatus(op.Status)
+	ses.StateFromOpStatus()
 	return ses, nil
 }
 
@@ -67,22 +67,34 @@ func (s *Session) Reload() error {
 		return err
 	}
 	s.Operator = op
-	s.StateFromStatus(op.Status)
+	s.StateFromOpStatus()
 	return nil
 }
 
-func (s *Session) StateFromStatus(status proto.OperatorStatus) {
-	switch status {
+func (s *Session) StateFromOpStatus() {
+	switch s.Operator.Status {
 	case proto.OperatorStatus_None, proto.OperatorStatus_Inactive:
 		s.ChangeState(State_Start)
 	case proto.OperatorStatus_Ready:
 		s.ChangeState(State_WaitForOrders)
+	case proto.OperatorStatus_Proposal:
+		s.State = State_WaitForOrders
+		order, err := GetOrder(s.Operator.CurrentOrder)
+		if err != nil {
+			log.Errorf("failed to load order %v: %v", s.Operator.CurrentOrder, err)
+		}
+		s.context = order
 	case proto.OperatorStatus_Busy:
-		// @TODO
+		s.State = State_ServeOrder
+		order, err := GetOrder(s.Operator.CurrentOrder)
+		if err != nil {
+			log.Errorf("failed to load order %v: %v", s.Operator.CurrentOrder, err)
+		}
+		s.context = order
 	case proto.OperatorStatus_Utility:
 		s.ChangeState(State_InterruptedAction)
 	default:
-		log.Errorf("unknown operator status %v in StateFromStatus", status)
+		log.Errorf("unknown operator status %v in StateFromStatus", s.Operator.Status)
 		s.ChangeState(State_Start)
 	}
 }

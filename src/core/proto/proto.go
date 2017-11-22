@@ -29,6 +29,7 @@ type Operator struct {
 	TelegramChat int64
 	HasValidKey  bool
 	Status       OperatorStatus
+	CurrentOrder uint64
 }
 
 var CheckKey = rabbit.RPC{
@@ -105,6 +106,11 @@ var CreateOrder = rabbit.RPC{
 	Name:        "create_order",
 	HandlerType: (func(Order) (Order, error))(nil),
 	Timeout:     time.Second * 5,
+}
+
+var GetOrder = rabbit.RPC{
+	Name:        "get_order",
+	HandlerType: (func(id uint64) (Order, error))(nil),
 }
 
 type AcceptOfferRequest struct {

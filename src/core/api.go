@@ -6,9 +6,11 @@ import (
 )
 
 var SendOffer func(proto.SendOfferRequest) (bool, error)
+var CancelOffer func(proto.CancelOfferRequest) (bool, error)
 
 func init() {
 	rabbit.DeclareRPC(proto.SendOffer, &SendOffer)
+	rabbit.DeclareRPC(proto.CancelOrder, &CancelOffer)
 
 	rabbit.AddPublishers(
 		rabbit.Publisher{

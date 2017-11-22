@@ -62,7 +62,7 @@ func (man *orderManager) loop() {
 
 		case order := <-man.orders:
 			var ops []Operator
-			err := db.New().Find(&ops, "status = ? AND current_order = 0", proto.OperatorStatus_Ready).Error
+			err := db.New().Find(&ops, "status = ?", proto.OperatorStatus_Ready).Error
 			if err != nil {
 				log.Errorf("failed to load list of ready operators: %v", err)
 				continue
@@ -236,8 +236,8 @@ func RejectOrder(order Order) error {
 		tx.Rollback()
 		return err
 	}
+	encoded := order.Encode()
 	for _, op := range ops {
-		// @TODO send cancellation
 		op.Status = proto.OperatorStatus_Ready
 		op.CurrentOrder = 0
 		err := tx.Save(op).Error
@@ -245,6 +245,15 @@ func RejectOrder(order Order) error {
 			tx.Rollback()
 			return err
 		}
+		go func() {
+			_, err := CancelOffer(tg.CancelOfferRequest{
+				ChatID: op.TelegramChat,
+				Order:  encoded,
+			})
+			if err != nil {
+				log.Errorf("failed to perform cancel offer request: %v", err)
+			}
+		}()
 	}
 	return tx.Commit().Error
 }

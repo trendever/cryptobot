@@ -12,6 +12,7 @@ var SetOperatorStatus func(proto.SetOperatorStatusRequest) (bool, error)
 var SetOperatorKey func(proto.SetOperatorKeyRequest) (proto.Operator, error)
 var AcceptOffer func(proto.AcceptOfferRequest) (bool, error)
 var SkipOffer func(proto.SkipOfferRequest) (bool, error)
+var GetOrder func(id uint64) (proto.Order, error)
 
 func init() {
 	rabbit.DeclareRPC(proto.CheckKey, &CheckKey)
@@ -20,4 +21,5 @@ func init() {
 	rabbit.DeclareRPC(proto.SetOperatorKey, &SetOperatorKey)
 	rabbit.DeclareRPC(proto.AcceptOffer, &AcceptOffer)
 	rabbit.DeclareRPC(proto.SkipOffer, &SkipOffer)
+	rabbit.DeclareRPC(proto.GetOrder, &GetOrder)
 }

@@ -16,6 +16,7 @@ func init() {
 	rabbit.ServeRPC(proto.SetOperatorStatus, SetOperatorStatus)
 	rabbit.ServeRPC(proto.SetOperatorKey, SetOperatorKey)
 	rabbit.ServeRPC(proto.CreateOrder, CreateOrder)
+	rabbit.ServeRPC(proto.GetOrder, GetOrder)
 	rabbit.ServeRPC(proto.AcceptOffer, AcceptOffer)
 	rabbit.ServeRPC(proto.SkipOffer, SkipOffer)
 }
@@ -48,6 +49,7 @@ func CheckKey(key lbapi.Key) (proto.Operator, error) {
 		TelegramChat: op.TelegramChat,
 		Status:       op.Status,
 		HasValidKey:  s && p,
+		CurrentOrder: op.CurrentOrder,
 	}, nil
 }
 
@@ -72,6 +74,7 @@ func OperatorByTg(chatID int64) (proto.Operator, error) {
 		TelegramChat: chatID,
 		Status:       op.Status,
 		HasValidKey:  s && p,
+		CurrentOrder: op.CurrentOrder,
 	}, nil
 }
 
@@ -82,17 +85,18 @@ func SetOperatorStatus(req proto.SetOperatorStatusRequest) (bool, error) {
 		return false, err
 	}
 	if op.Status == proto.OperatorStatus_Busy {
-		if err != nil {
-			return false, errors.New("operator is busy")
-		}
+		return false, errors.New("operator is busy")
 	}
-	if op.Status == proto.OperatorStatus_Ready {
+	if op.Status == proto.OperatorStatus_Proposal {
 		op.CurrentOrder = 0
 	}
 	op.Status = req.Status
 	err = db.New().Save(&op).Error
 	if err != nil {
 		return false, err
+	}
+	if req.Status == proto.OperatorStatus_Ready {
+		manager.PushOperator(op)
 	}
 	return true, nil
 }
@@ -138,6 +142,7 @@ func SetOperatorKey(req proto.SetOperatorKeyRequest) (proto.Operator, error) {
 		TelegramChat: op.TelegramChat,
 		Status:       op.Status,
 		HasValidKey:  true,
+		CurrentOrder: op.CurrentOrder,
 	}, nil
 }
 
@@ -184,6 +189,19 @@ func CreateOrder(req proto.Order) (proto.Order, error) {
 
 	manager.PushOrder(order)
 
+	return order.Encode(), nil
+}
+
+func GetOrder(id uint64) (proto.Order, error) {
+	var order Order
+	scope := db.New().First(&order, "id = ?", id)
+	if scope.RecordNotFound() {
+		return proto.Order{}, errors.New("record not found")
+	}
+	if scope.Error != nil {
+		log.Errorf("failed to load order %v: %v", id, scope.Error)
+		return proto.Order{}, errors.New("db error")
+	}
 	return order.Encode(), nil
 }
 

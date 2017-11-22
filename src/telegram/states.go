@@ -183,7 +183,7 @@ var statesInit = map[State]StateActions{
 			case proto.OrderStatus_New:
 				log.Error(SendMessage(
 					s.Dest(),
-					fmt.Sprintf(M("new order %v from %v for an amount %v%v"), order.ID, order.ClientName, order.FiatAmount, order.Currency),
+					fmt.Sprintf(M("new order %v from %v for an amount of %v %v"), order.ID, order.ClientName, order.FiatAmount, order.Currency),
 					Keyboard(M("accept"), M("skip")),
 				))
 				s.context = order
@@ -230,8 +230,9 @@ var statesInit = map[State]StateActions{
 	State_ServeOrder: {
 		Enter: func(s *Session) {
 			log.Error(SendMessage(s.Dest(), M("ok"), nil))
-			// @TODO
-			s.ChangeState(State_Start)
+		},
+		Message: func(s *Session, msg *telebot.Message) {
+			log.Error(SendMessage(s.Dest(), M("eh"), Keyboard(M("nothing"))))
 		},
 	},
 }
