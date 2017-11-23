@@ -144,7 +144,7 @@ var statesInit = map[State]StateActions{
 					log.Error(SendMessage(s.Dest(), M("there was no active offer"), Keyboard(M("cancel"))))
 					return
 				}
-				_, err := AcceptOffer(proto.AcceptOfferRequest{
+				order, err := AcceptOffer(proto.AcceptOfferRequest{
 					OperatorID: s.Operator.ID,
 					OrderID:    order.ID,
 				})
@@ -153,6 +153,7 @@ var statesInit = map[State]StateActions{
 					return
 				}
 				s.ChangeState(State_ServeOrder)
+				s.context = order
 				return
 
 			case M("skip"):
@@ -229,12 +230,24 @@ var statesInit = map[State]StateActions{
 
 	State_ServeOrder: {
 		Enter: func(s *Session) {
-			log.Error(SendMessage(s.Dest(), M("ok"), nil))
+			log.Error(SendMessage(s.Dest(), M("order accepted"), Keyboard(M("drop"))))
 		},
-		Message: func(s *Session, msg *telebot.Message) {
-			log.Error(SendMessage(s.Dest(), M("eh"), Keyboard(M("nothing"))))
-		},
+		Message: serveOrderMessage,
 	},
+}
+
+func serveOrderMessage(s *Session, msg *telebot.Message) {
+	order, ok := s.context.(proto.Order)
+	if !ok {
+		s.ChangeState(State_Unavailable)
+		return
+	}
+	switch order.Status {
+	case proto.OrderStatus_Accepted:
+
+	}
+
+	log.Error(SendMessage(s.Dest(), M("eh"), Keyboard(M("nothing"))))
 }
 
 func startKeyboard(s *Session) *telebot.SendOptions {

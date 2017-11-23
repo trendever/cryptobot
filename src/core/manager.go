@@ -20,10 +20,15 @@ type orderManager struct {
 	accepts   chan accept
 }
 
+type acceptReply struct {
+	order Order
+	err   error
+}
+
 type accept struct {
 	orderID    uint64
 	operatorID uint64
-	reply      chan error
+	reply      chan acceptReply
 }
 
 var manager = orderManager{
@@ -117,14 +122,15 @@ func (man *orderManager) PushOperator(op Operator) {
 	man.operators <- op
 }
 
-func (man *orderManager) AcceptOffer(operatorID, orderID uint64) error {
-	reply := make(chan error)
+func (man *orderManager) AcceptOffer(operatorID, orderID uint64) (Order, error) {
+	reply := make(chan acceptReply)
 	man.accepts <- accept{
 		operatorID: operatorID,
 		orderID:    orderID,
 		reply:      reply,
 	}
-	return <-reply
+	ret := <-reply
+	return ret.order, ret.err
 }
 
 func (man *orderManager) acceptOrder(accept accept) {
@@ -139,7 +145,9 @@ func (man *orderManager) acceptOrder(accept accept) {
 	}
 	// Order was taken by someone else or rejected on timeout already
 	if order.ID == 0 {
-		accept.reply <- errors.New("order unaviable")
+		accept.reply <- acceptReply{
+			err: errors.New("order unaviable"),
+		}
 		return
 	}
 
@@ -148,33 +156,43 @@ func (man *orderManager) acceptOrder(accept accept) {
 	scope := tx.First(&op, "id = ?", accept.operatorID)
 	if scope.RecordNotFound() {
 		log.Errorf("unknown operator id %v in order accept", accept.operatorID)
-		accept.reply <- errors.New("unknown operator")
+		accept.reply <- acceptReply{
+			err: errors.New("unknown operator"),
+		}
 		tx.Rollback()
 		return
 	}
 	if scope.Error != nil {
 		log.Errorf("failed to load operator %v: %v", accept.operatorID, scope.Error)
-		accept.reply <- errors.New("db error")
+		accept.reply <- acceptReply{
+			err: errors.New("db error"),
+		}
 		tx.Rollback()
 		return
 	}
 
 	if op.Deposit.Cmp(order.LBAmount) < 0 {
 		log.Errorf("operator %v tried to accept order %v but do not have enough on deposit", accept.operatorID, order.ID, op.Status)
-		accept.reply <- errors.New("lack of deposit")
+		accept.reply <- acceptReply{
+			err: errors.New("lack of deposit"),
+		}
 		tx.Rollback()
 		return
 	}
 
 	if op.Status != proto.OperatorStatus_Proposal {
 		log.Errorf("operator %v tried to accept order %v but had unexpected status %v", accept.operatorID, order.ID, op.Status)
-		accept.reply <- errors.New("unexpected status")
+		accept.reply <- acceptReply{
+			err: errors.New("unexpected status"),
+		}
 		tx.Rollback()
 		return
 	}
 	if op.CurrentOrder != accept.orderID {
 		log.Errorf("operator %v tried to accept order %v while his current order was %v", accept.operatorID, order.ID, op.CurrentOrder)
-		accept.reply <- errors.New("unexpected status")
+		accept.reply <- acceptReply{
+			err: errors.New("unexpected status"),
+		}
 		tx.Rollback()
 		return
 	}
@@ -183,7 +201,9 @@ func (man *orderManager) acceptOrder(accept accept) {
 	err := tx.Save(&op).Error
 	if err != nil {
 		log.Errorf("failed to save operator: %v", err)
-		accept.reply <- errors.New("db error")
+		accept.reply <- acceptReply{
+			err: errors.New("db error"),
+		}
 		tx.Rollback()
 		return
 	}
@@ -193,7 +213,9 @@ func (man *orderManager) acceptOrder(accept accept) {
 	err = tx.Save(&order).Error
 	if err != nil {
 		log.Errorf("failed to save order: %v", err)
-		accept.reply <- errors.New("db error")
+		accept.reply <- acceptReply{
+			err: errors.New("db error"),
+		}
 		tx.Rollback()
 		return
 	}
@@ -201,11 +223,15 @@ func (man *orderManager) acceptOrder(accept accept) {
 	err = tx.Commit().Error
 	if err != nil {
 		log.Errorf("failed to commit: %v", err)
-		accept.reply <- errors.New("db error")
+		accept.reply <- acceptReply{
+			err: errors.New("db error"),
+		}
 		return
 	}
 
-	accept.reply <- nil
+	accept.reply <- acceptReply{
+		order: order,
+	}
 	man.waiters = append(man.waiters[:i], man.waiters[i+1:]...)
 }
 

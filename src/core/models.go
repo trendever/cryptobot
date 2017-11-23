@@ -44,11 +44,13 @@ type Order struct {
 	Currency      string
 	// In currency above
 	FiatAmount decimal.Decimal `gorm:"type:decimal"`
-	// Value of lb contract
-	LBAmount decimal.Decimal `gorm:"type:decimal"`
-	// @TODO commission-related fields?
-	Status     proto.OrderStatus
-	OperatorID uint64
+	// Value of lb contract in bitcoins
+	LBAmount    decimal.Decimal `gorm:"type:decimal"`
+	LBFee       decimal.Decimal `gorm:"type:decimal"`
+	OperatorFee decimal.Decimal `gorm:"type:decimal"`
+	BotFee      decimal.Decimal `gorm:"type:decimal"`
+	Status      proto.OrderStatus
+	OperatorID  uint64
 }
 
 func (order Order) Encode() proto.Order {

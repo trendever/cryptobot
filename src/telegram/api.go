@@ -10,7 +10,7 @@ var CheckKey func(lbapi.Key) (proto.Operator, error)
 var OperatorByTd func(chatID int64) (proto.Operator, error)
 var SetOperatorStatus func(proto.SetOperatorStatusRequest) (bool, error)
 var SetOperatorKey func(proto.SetOperatorKeyRequest) (proto.Operator, error)
-var AcceptOffer func(proto.AcceptOfferRequest) (bool, error)
+var AcceptOffer func(proto.AcceptOfferRequest) (proto.Order, error)
 var SkipOffer func(proto.SkipOfferRequest) (bool, error)
 var GetOrder func(id uint64) (proto.Order, error)
 

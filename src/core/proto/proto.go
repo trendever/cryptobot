@@ -120,7 +120,7 @@ type AcceptOfferRequest struct {
 
 var AcceptOffer = rabbit.RPC{
 	Name:        "accept_offer",
-	HandlerType: (func(AcceptOfferRequest) (bool, error))(nil),
+	HandlerType: (func(AcceptOfferRequest) (Order, error))(nil),
 }
 
 type SkipOfferRequest struct {

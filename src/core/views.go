@@ -205,8 +205,9 @@ func GetOrder(id uint64) (proto.Order, error) {
 	return order.Encode(), nil
 }
 
-func AcceptOffer(req proto.AcceptOfferRequest) (bool, error) {
-	return true, manager.AcceptOffer(req.OperatorID, req.OrderID)
+func AcceptOffer(req proto.AcceptOfferRequest) (proto.Order, error) {
+	order, err := manager.AcceptOffer(req.OperatorID, req.OrderID)
+	return order.Encode(), err
 }
 
 func SkipOffer(req proto.SkipOfferRequest) (bool, error) {
