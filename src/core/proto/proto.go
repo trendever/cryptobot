@@ -2,12 +2,17 @@ package proto
 
 import (
 	"common/rabbit"
+	"errors"
 	"github.com/shopspring/decimal"
 	"lbapi"
 	"time"
 )
 
 type OperatorStatus int
+
+var (
+	DBError = errors.New("db error")
+)
 
 const (
 	// Account does not have valid keypair and does not perform any utility actions in the moment
@@ -72,18 +77,22 @@ const (
 	OrderStatus_Rejected OrderStatus = 3
 	// Operator took order
 	OrderStatus_Accepted OrderStatus = 4
+	// Operator dropped order after accepting it but before requisites was sent to client.
+	OrderStatus_Dropped OrderStatus = 5
+	// Related lb contact found
+	OrderStatus_Linked OrderStatus = 6
 	// Waiting for payment from client
-	OrderStatus_Payment OrderStatus = 5
+	OrderStatus_Payment OrderStatus = 7
 	// Canceled by client
-	OrderStatus_Canceled OrderStatus = 6
+	OrderStatus_Canceled OrderStatus = 8
 	// Client did not fund lb contract in time
-	OrderStatus_Timeout OrderStatus = 7
-	// Waiting for confirmation from operator
-	OrderStatus_Confirmation OrderStatus = 8
+	OrderStatus_Timeout OrderStatus = 9
+	// Waiting for confirmation from operator or lb
+	OrderStatus_Confirmation OrderStatus = 10
 	// Transferring bitshares
-	OrderStatus_Transfer OrderStatus = 9
+	OrderStatus_Transfer OrderStatus = 11
 	// Finished
-	OrderStatus_Finished OrderStatus = 10
+	OrderStatus_Finished OrderStatus = 12
 )
 
 type Order struct {
@@ -131,4 +140,25 @@ type SkipOfferRequest struct {
 var SkipOffer = rabbit.RPC{
 	Name:        "skip_offer",
 	HandlerType: (func(SkipOfferRequest) (bool, error))(nil),
+}
+
+type DropOrderRequest struct {
+	OperatorID uint64
+	OrderID    uint64
+}
+
+// Drop accepted order
+var DropOrder = rabbit.RPC{
+	Name:        "drop_order",
+	HandlerType: (func(DropOrderRequest) (bool, error))(nil),
+}
+
+type LinkLBContractRequest struct {
+	OrderID    uint64
+	Requisites string
+}
+
+var LinkLBContact = rabbit.RPC{
+	Name:        "link_lb_contact",
+	HandlerType: (func(LinkLBContractRequest) (Order, error))(nil),
 }

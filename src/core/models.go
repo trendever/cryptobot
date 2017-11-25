@@ -43,7 +43,9 @@ type Order struct {
 	PaymentMethod string
 	Currency      string
 	// In currency above
-	FiatAmount decimal.Decimal `gorm:"type:decimal"`
+	FiatAmount        decimal.Decimal `gorm:"type:decimal"`
+	PaymentRequisites string          `gorm:"text"`
+	LBContactID       uint64
 	// Value of lb contract in bitcoins
 	LBAmount    decimal.Decimal `gorm:"type:decimal"`
 	LBFee       decimal.Decimal `gorm:"type:decimal"`

@@ -27,7 +27,6 @@ func SendNotifyHandler(notify proto.SendNotifyMessage) bool {
 }
 
 func SendOfferHandler(req proto.SendOfferRequest) (bool, error) {
-	log.Debug("new offer: %+v", req)
 	global.events <- event{
 		ChatID: req.ChatID,
 		Data:   req.Order,
@@ -36,7 +35,6 @@ func SendOfferHandler(req proto.SendOfferRequest) (bool, error) {
 }
 
 func CancelOfferHandler(req proto.CancelOfferRequest) (bool, error) {
-	log.Debug("cancel offer: %+v", req)
 	global.events <- event{
 		ChatID: req.ChatID,
 		Data:   req.Order,

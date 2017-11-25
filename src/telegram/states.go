@@ -230,7 +230,7 @@ var statesInit = map[State]StateActions{
 
 	State_ServeOrder: {
 		Enter: func(s *Session) {
-			log.Error(SendMessage(s.Dest(), M("order accepted"), Keyboard(M("drop"))))
+			log.Error(SendMessage(s.Dest(), M("create lb contact and input requisites here"), Keyboard(M("drop"))))
 		},
 		Message: serveOrderMessage,
 	},
@@ -242,12 +242,23 @@ func serveOrderMessage(s *Session, msg *telebot.Message) {
 		s.ChangeState(State_Unavailable)
 		return
 	}
+	if msg.Text == M("drop") {
+		_, err := DropOrder(proto.DropOrderRequest{
+			OperatorID: s.Operator.ID,
+			OrderID:    order.ID,
+		})
+		if err != nil {
+			s.ChangeState(State_Unavailable)
+			return
+		}
+	}
+	// @TODO
 	switch order.Status {
 	case proto.OrderStatus_Accepted:
 
 	}
 
-	log.Error(SendMessage(s.Dest(), M("eh"), Keyboard(M("nothing"))))
+	log.Error(SendMessage(s.Dest(), M("eh"), Keyboard(M("drop"))))
 }
 
 func startKeyboard(s *Session) *telebot.SendOptions {

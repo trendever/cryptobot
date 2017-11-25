@@ -20,6 +20,7 @@ func init() {
 	rabbit.ServeRPC(proto.AcceptOffer, AcceptOffer)
 	rabbit.ServeRPC(proto.SkipOffer, SkipOffer)
 	rabbit.ServeRPC(proto.DropOrder, DropOrder)
+	rabbit.ServeRPC(proto.LinkLBContact, LinkLBContract)
 }
 
 func CheckKey(key lbapi.Key) (proto.Operator, error) {
@@ -284,4 +285,49 @@ func DropOrder(req proto.DropOrderRequest) (bool, error) {
 		return false, proto.DBError
 	}
 	return true, nil
+}
+
+func LinkLBContract(req proto.LinkLBContractRequest) (proto.Order, error) {
+	if req.Requisites == "" {
+		return proto.Order{}, errors.New("empty requisites")
+	}
+	var order Order
+	err := db.New().First(&order, "id = ?", req.OrderID).Error
+	if err != nil {
+		log.Errorf("failed to load order %v: %v", req.OrderID, err)
+		return proto.Order{}, proto.DBError
+	}
+	var op Operator
+	err = db.New().First(&op, "id = ?", order.OperatorID).Error
+	if err != nil {
+		log.Errorf("failed to load operator %v: %v", order.OperatorID, err)
+		return proto.Order{}, proto.DBError
+	}
+
+	contacts, err := op.Key.ActiveContacts()
+	found := false
+	var contact lbapi.Contact
+	for _, contact = range contacts {
+		if contact.Data.Currency == order.Currency && contact.Data.Amount == order.FiatAmount {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return order.Encode(), errors.New("contact not found")
+	}
+
+	order.LBContactID = contact.Data.ContactID
+	order.LBAmount = contact.Data.AmountBTC
+	order.LBFee = contact.Data.FeeBTC
+	order.Status = proto.OrderStatus_Linked
+	order.PaymentRequisites = req.Requisites
+
+	err = db.New().Save(&order).Error
+	if err != nil {
+		log.Errorf("failed to save order %v: %v", order.ID, err)
+		return proto.Order{}, proto.DBError
+	}
+
+	return order.Encode(), nil
 }
