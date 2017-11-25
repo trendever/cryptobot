@@ -19,6 +19,7 @@ func init() {
 	rabbit.ServeRPC(proto.GetOrder, GetOrder)
 	rabbit.ServeRPC(proto.AcceptOffer, AcceptOffer)
 	rabbit.ServeRPC(proto.SkipOffer, SkipOffer)
+	rabbit.ServeRPC(proto.DropOrder, DropOrder)
 }
 
 func CheckKey(key lbapi.Key) (proto.Operator, error) {
@@ -39,7 +40,8 @@ func CheckKey(key lbapi.Key) (proto.Operator, error) {
 			Username: acc.Username,
 		}, nil
 	case scope.Error != nil:
-		return proto.Operator{}, scope.Error
+		log.Errorf("failed to load operator '%v': %v", acc.Username, scope.Error)
+		return proto.Operator{}, proto.DBError
 	}
 
 	s, p = op.Key.IsValid()
@@ -63,7 +65,8 @@ func OperatorByTg(chatID int64) (proto.Operator, error) {
 		}, nil
 
 	case scope.Error != nil:
-		return proto.Operator{}, scope.Error
+		log.Errorf("failed to load operator for chat %v: %v", chatID, scope.Error)
+		return proto.Operator{}, proto.DBError
 	}
 
 	s, p := op.Key.IsValid()
@@ -82,16 +85,19 @@ func SetOperatorStatus(req proto.SetOperatorStatusRequest) (bool, error) {
 	var op Operator
 	err := db.New().First(&op, "telegram_chat = ?", req.ChatID).Error
 	if err != nil {
-		return false, err
+		log.Errorf("failed to load operator for chat %v: %v", req.ChatID, err)
+		return false, proto.DBError
 	}
 	if op.Status == proto.OperatorStatus_Busy {
 		return false, errors.New("operator is busy")
 	}
-	if op.Status == proto.OperatorStatus_Proposal {
-		op.CurrentOrder = 0
+	var updMap = map[string]interface{}{
+		"status": req.Status,
 	}
-	op.Status = req.Status
-	err = db.New().Save(&op).Error
+	if op.Status == proto.OperatorStatus_Proposal {
+		updMap["current_order"] = 0
+	}
+	err = db.New().Model(&op).Updates(updMap).Error
 	if err != nil {
 		return false, err
 	}
@@ -117,23 +123,30 @@ func SetOperatorKey(req proto.SetOperatorKeyRequest) (proto.Operator, error) {
 	case scope.RecordNotFound():
 		op.Username = acc.Username
 		op.Deposit = decimal.Zero
+		op.TelegramChat = req.ChatID
+		op.Status = proto.OperatorStatus_Inactive
+		op.Key = req.Key
+		err = db.New().Create(&op).Error
 
 	case scope.Error != nil:
-		return proto.Operator{}, scope.Error
+		log.Errorf("failed to load operator '%v': %v", acc.Username, scope.Error)
+		return proto.Operator{}, proto.DBError
 
 	default:
 		if op.TelegramChat != req.ChatID {
 			// @TODO send something to old chat and ensure unique chatID
 		}
+		err = db.New().Model(&op).Updates(map[string]interface{}{
+			"telegram_chat": req.ChatID,
+			"status":        proto.OperatorStatus_Inactive,
+			"lb_key":        req.Key.Public,
+			"lb_secret":     req.Key.Secret,
+		}).Error
 	}
 
-	op.TelegramChat = req.ChatID
-	op.Status = proto.OperatorStatus_Inactive
-	op.Key = req.Key
-
-	err = db.New().Save(&op).Error
 	if err != nil {
-		return proto.Operator{}, err
+		log.Errorf("failed to save operator %v: %v", op.ID, err)
+		return proto.Operator{}, proto.DBError
 	}
 
 	return proto.Operator{
@@ -184,7 +197,7 @@ func CreateOrder(req proto.Order) (proto.Order, error) {
 	err = db.New().Save(&order).Error
 	if err != nil {
 		log.Errorf("failed to save new order: %v", err)
-		return proto.Order{}, errors.New("db error")
+		return proto.Order{}, proto.DBError
 	}
 
 	manager.PushOrder(order)
@@ -200,7 +213,7 @@ func GetOrder(id uint64) (proto.Order, error) {
 	}
 	if scope.Error != nil {
 		log.Errorf("failed to load order %v: %v", id, scope.Error)
-		return proto.Order{}, errors.New("db error")
+		return proto.Order{}, proto.DBError
 	}
 	return order.Encode(), nil
 }
@@ -211,6 +224,64 @@ func AcceptOffer(req proto.AcceptOfferRequest) (proto.Order, error) {
 }
 
 func SkipOffer(req proto.SkipOfferRequest) (bool, error) {
-	// @TODO
-	return false, errors.New("unimlemented")
+	var op Operator
+	err := db.New().First(&op, "id = ?", req.OperatorID).Error
+	if err != nil {
+		log.Errorf("failed to load operator %v: %v", req.OperatorID, err)
+		return false, proto.DBError
+	}
+	if op.Status != proto.OperatorStatus_Proposal || op.CurrentOrder != req.OrderID {
+		log.Debug("operator %v tried to skip offer %v while his current status was %v, order %v",
+			req.OperatorID, req.OrderID, op.Status, op.CurrentOrder)
+		return false, errors.New("unexpected status")
+	}
+	err = db.New().Model(&op).Updates(map[string]interface{}{
+		"status":        proto.OperatorStatus_Ready,
+		"current_order": 0,
+	}).Error
+	if err != nil {
+		log.Errorf("failed to save operator %v: %v", op.ID, err)
+		return false, proto.DBError
+	}
+	manager.PushOperator(op)
+	return true, nil
+}
+
+func DropOrder(req proto.DropOrderRequest) (bool, error) {
+	var op Operator
+	err := db.New().First(&op, "id = ?", req.OperatorID).Error
+	if err != nil {
+		log.Errorf("failed to load operator %v: %v", req.OperatorID, err)
+		return false, proto.DBError
+	}
+	if op.Status != proto.OperatorStatus_Busy || op.CurrentOrder != req.OrderID {
+		log.Debug("operator %v tried to drop order %v while his current status was %v, order %v",
+			req.OperatorID, req.OrderID, op.Status, op.CurrentOrder)
+		return false, errors.New("unexpected status")
+	}
+	var order Order
+	err = db.New().First(&order, "id = ?", req.OrderID).Error
+	if err != nil {
+		log.Errorf("failed to load order %v: %v", req.OrderID, err)
+		return false, proto.DBError
+	}
+	if order.Status != proto.OrderStatus_Accepted {
+		log.Debug("operator %v tried to drop order %v while order had status %v",
+			req.OperatorID, req.OrderID, order.Status)
+		return false, errors.New("unexpected status")
+	}
+
+	tx := db.NewTransaction()
+	order.Status = proto.OrderStatus_Dropped
+	err = tx.Save(&order).Error
+	if err != nil {
+		log.Errorf("failed to save order %v: %v", order.ID, err)
+		return false, proto.DBError
+	}
+	err = tx.Model(&op).Update("status", proto.OperatorStatus_Inactive).Error
+	if err != nil {
+		log.Errorf("failed to save operator %v: %v", op.ID, err)
+		return false, proto.DBError
+	}
+	return true, nil
 }

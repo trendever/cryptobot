@@ -197,8 +197,7 @@ func (man *orderManager) acceptOrder(accept accept) {
 		return
 	}
 
-	op.Status = proto.OperatorStatus_Busy
-	err := tx.Save(&op).Error
+	err := tx.Update(&op).Update("status", proto.OperatorStatus_Busy).Error
 	if err != nil {
 		log.Errorf("failed to save operator: %v", err)
 		accept.reply <- acceptReply{
@@ -243,9 +242,10 @@ func OfferOrder(op Operator, order Order) error {
 	if err != nil {
 		return err
 	}
-	op.Status = proto.OperatorStatus_Proposal
-	op.CurrentOrder = order.ID
-	return db.New().Save(op).Error
+	return db.New().Model(op).Updates(map[string]interface{}{
+		"status":        proto.OperatorStatus_Proposal,
+		"current_order": order.ID,
+	}).Error
 }
 
 func RejectOrder(order Order) error {
@@ -264,9 +264,10 @@ func RejectOrder(order Order) error {
 	}
 	encoded := order.Encode()
 	for _, op := range ops {
-		op.Status = proto.OperatorStatus_Ready
-		op.CurrentOrder = 0
-		err := tx.Save(op).Error
+		err := tx.Model(&op).Updates(map[string]interface{}{
+			"status":        proto.OperatorStatus_Ready,
+			"current_order": 0,
+		}).Error
 		if err != nil {
 			tx.Rollback()
 			return err
@@ -286,7 +287,7 @@ func RejectOrder(order Order) error {
 
 func NotifyLackOfDeposit(op Operator, required decimal.Decimal) {
 	err := SendTelegramNotify(op.TelegramChat, fmt.Sprintf(
-		M("order for an amount %v was skipped due lack of deposit(you have %v)"), required, op.Deposit,
+		M("order for an BTC amount %v was skipped due lack of your deposit(have %v)"), required, op.Deposit,
 	))
 	if err != nil {
 		log.Errorf("failed to send lack of deposit notify: %v", err)
