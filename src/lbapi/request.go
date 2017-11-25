@@ -148,6 +148,16 @@ func (key Key) DecodedRequest(method, endpoint string, args string, out interfac
 	return
 }
 
+type Profile struct {
+	Username   string    `json:"username"`
+	LastOnline time.Time `json:"last_online"`
+	// can contain bs values like "N/A" or "10 000+"
+	TradeCount    string  `json:"trade_count"`
+	FeedbackScore float32 `json:"feedback_score"`
+	// >username, trade count and feedback score combined
+	Combined string `json:"name"`
+}
+
 type Advertisement struct {
 	Data struct {
 		ID                   uint64    `json:"ad_id"`
@@ -191,15 +201,7 @@ type Advertisement struct {
 		// wat?
 		Floating bool `json:"floating"`
 
-		Profile struct {
-			Username   string    `json:"username"`
-			LastOnline time.Time `json:"last_online"`
-			// can contain bs values like "N/A" or "10 000+"
-			TradeCount    string  `json:"trade_count"`
-			FeedbackScore float32 `json:"feedback_score"`
-			// >username, trade count and feedback score combined
-			Combined string `json:"name"`
-		} `json:"profile"`
+		Profile Profile `json:"profile"`
 
 		RequireFeedbackScore       int64           `json:"require_feedback_score"`
 		RequireTradeVolume         decimal.Decimal `json:"require_trade_volume"`
@@ -362,4 +364,85 @@ func (key Key) AccountInfo(username string) (Account, error) {
 	var result Account
 	_, err := key.DecodedRequest("GET", fmt.Sprintf("/api/account_info/%v/", username), "", &result)
 	return result, err
+}
+
+type Contact struct {
+	Data struct {
+		ContactID uint64    `json:"contact_id"`
+		CreatedAt time.Time `json:"created_at"`
+		Currency  string    `json:"currency"`
+		// Fiat amount
+		Amount    decimal.Decimal `json:"amount"`
+		AmountBTC decimal.Decimal `json:"amount_btc"`
+		FeeBTC    decimal.Decimal `json:"fee_btc"`
+		// Any if times below can be zero if contact did not enter related state.
+		EscrowedAt            time.Time `json:"escrowed_at"`
+		FundedAt              time.Time `json:"funded_at"`
+		PaymentCompletedAt    time.Time `json:"payment_completed_at"`
+		DisputedAt            time.Time `json:"disputed_at"`
+		ClosedAt              time.Time `json:"closed_at"`
+		ReleasedAt            time.Time `json:"released_at"`
+		ExchangeRateUpdatedAt time.Time `json:"exchange_rate_updated_at"`
+		Buyer                 Profile   `json:"buyer"`
+		Seller                Profile   `json:"seller"`
+		// No idea what it is.
+		ReferenceCode string `json:"reference_code"`
+		Advertisement struct {
+			ID        uint64 `json:"id"`
+			TradeType string `json:"trade_type"`
+			// Is not it same as seller?
+			Advertiser Profile `json:"advertiser"`
+		} `json:"advertisement"`
+		IsBuying  bool `json:"is_buying"`
+		IsSelling bool `json:"is_selling"`
+		// >Boolean signalling if the escrow is enabled and not funded.
+		// >Note: If escrow is not enabled, this value is unset.
+		IsFunded bool `json:"is_funded"`
+	} `json:"data"`
+	Actions struct {
+		MarkAsPaidURL           string `json:"mark_as_paid_url"`
+		MessagesURL             string `json:"messages_url"`
+		MessagePostURL          string `json:"message_post_url"`
+		ReleaseURL              string `json:"release_url"`
+		FundURL                 string `json:"fund_url"`
+		AdvertisementURL        string `json:"advertisement_url"`
+		AdvertisementPublicView string `json:"advertisement_public_view"`
+	} `json:"actions"`
+}
+
+func (key Key) contactsList(baseURL string) ([]Contact, error) {
+	var ret []Contact
+	uri := baseURL
+	for {
+		var result struct {
+			List  []Contact `json:"contact_list"`
+			Count uint64    `json:"contact_count"`
+		}
+		next, err := key.DecodedRequest("GET", uri, "", &result)
+		if err != nil {
+			return ret, err
+		}
+		ret = append(ret, result.List...)
+		if next == "" {
+			break
+		}
+		uri = next
+	}
+	return ret, nil
+}
+
+func (key Key) ActiveContacts() ([]Contact, error) {
+	return key.contactsList("/api/dashboard/")
+}
+
+func (key Key) ReleasedContacts() ([]Contact, error) {
+	return key.contactsList("/api/dashboard/released/")
+}
+
+func (key Key) CanceledContacts() ([]Contact, error) {
+	return key.contactsList("/api/dashboard/canceled/")
+}
+
+func (key Key) ClosedContacts() ([]Contact, error) {
+	return key.contactsList("/api/dashboard/closed/")
 }
