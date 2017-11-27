@@ -233,7 +233,50 @@ var statesInit = map[State]StateActions{
 			log.Error(SendMessage(s.Dest(), M("create lb contact and input requisites here"), Keyboard(M("drop"))))
 		},
 		Message: serveOrderMessage,
+		Event:   serveOrderEvent,
 	},
+}
+
+func serveOrderEvent(s *Session, event interface{}) {
+	order, ok := event.(proto.Order)
+	if !ok {
+		return
+	}
+	switch order.Status {
+	case proto.OrderStatus_Canceled:
+		log.Error(SendMessage(
+			s.Dest(),
+			fmt.Sprintf(M("order %v was canceled by client"), order.ID),
+			Keyboard(M("cancel")),
+		))
+		s.ChangeState(State_WaitForOrders)
+	case proto.OrderStatus_Timeout:
+		log.Error(SendMessage(
+			s.Dest(),
+			fmt.Sprintf(M("order %v was canceled on timeout"), order.ID),
+			Keyboard(M("cancel")),
+		))
+		s.ChangeState(State_WaitForOrders)
+
+	case proto.OrderStatus_Confirmation:
+		// @TODO
+
+	default:
+		log.Warn("got order %v with unxepected status %v in WaitForOrders", order.ID, order.Status)
+		if s.context == nil {
+			return
+		}
+		ctx, ok := s.context.(proto.Order)
+		if !ok || ctx.ID != order.ID {
+			return
+		}
+		log.Error(SendMessage(
+			s.Dest(),
+			fmt.Sprintf(M("order %v entered unexped state"), order.ID),
+			Keyboard(M("cancel")),
+		))
+		s.context = nil
+	}
 }
 
 func serveOrderMessage(s *Session, msg *telebot.Message) {
@@ -252,13 +295,46 @@ func serveOrderMessage(s *Session, msg *telebot.Message) {
 			return
 		}
 	}
-	// @TODO
 	switch order.Status {
-	case proto.OrderStatus_Accepted:
+	case proto.OrderStatus_Linked:
+		if msg.Text == M("confirm") {
+			order, err := RequestPayment(order.ID)
+			if err != nil {
+				s.ChangeState(State_Unavailable)
+				return
+			}
+			s.context = order
+			log.Error(SendMessage(s.Dest(), M("wait for payment"), Keyboard()))
+			return
+		}
+		fallthrough
 
+	case proto.OrderStatus_Accepted:
+		order, err := LinkLBContact(proto.LinkLBContractRequest{
+			OrderID:    s.Operator.ID,
+			Requisites: msg.Text,
+		})
+		switch err {
+		case nil:
+			s.context = order
+			log.Error(SendMessage(s.Dest(), fmt.Sprintf(
+				M("lb link: %v\ncontact amount: %v\nrequsites:\n%v"),
+				fmt.Sprintf("https://localbitcoins.com/request/online_sell_buyer/%v", order.LBContractID),
+				order.LBAmount, order.PaymentRequisites,
+			), Keyboard(M("confirm"), M("drop"))))
+
+		// @TODO Do we need a way to exchange without contact?
+		case proto.ContactNotFoundError:
+			log.Error(SendMessage(s.Dest(), M("related lb contact not found"), Keyboard(M("drop"))))
+		default:
+			s.ChangeState(State_Unavailable)
+		}
+
+	default:
+		s.ChangeState(State_Unavailable)
 	}
 
-	log.Error(SendMessage(s.Dest(), M("eh"), Keyboard(M("drop"))))
+	return
 }
 
 func startKeyboard(s *Session) *telebot.SendOptions {

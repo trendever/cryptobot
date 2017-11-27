@@ -21,6 +21,7 @@ func init() {
 	rabbit.ServeRPC(proto.SkipOffer, SkipOffer)
 	rabbit.ServeRPC(proto.DropOrder, DropOrder)
 	rabbit.ServeRPC(proto.LinkLBContact, LinkLBContract)
+	rabbit.ServeRPC(proto.RequestPayment, RequestPayment)
 }
 
 func CheckKey(key lbapi.Key) (proto.Operator, error) {
@@ -100,7 +101,8 @@ func SetOperatorStatus(req proto.SetOperatorStatusRequest) (bool, error) {
 	}
 	err = db.New().Model(&op).Updates(updMap).Error
 	if err != nil {
-		return false, err
+		log.Errorf("failed to update operator status: %v", err)
+		return false, proto.DBError
 	}
 	if req.Status == proto.OperatorStatus_Ready {
 		manager.PushOperator(op)
@@ -266,7 +268,7 @@ func DropOrder(req proto.DropOrderRequest) (bool, error) {
 		log.Errorf("failed to load order %v: %v", req.OrderID, err)
 		return false, proto.DBError
 	}
-	if order.Status != proto.OrderStatus_Accepted {
+	if order.Status != proto.OrderStatus_Accepted && order.Status != proto.OrderStatus_Linked {
 		log.Debug("operator %v tried to drop order %v while order had status %v",
 			req.OperatorID, req.OrderID, order.Status)
 		return false, errors.New("unexpected status")
@@ -297,6 +299,11 @@ func LinkLBContract(req proto.LinkLBContractRequest) (proto.Order, error) {
 		log.Errorf("failed to load order %v: %v", req.OrderID, err)
 		return proto.Order{}, proto.DBError
 	}
+
+	if order.Status != proto.OrderStatus_Accepted && order.Status != proto.OrderStatus_Linked {
+		return proto.Order{}, errors.New("unexpected status")
+	}
+
 	var op Operator
 	err = db.New().First(&op, "id = ?", order.OperatorID).Error
 	if err != nil {
@@ -314,15 +321,34 @@ func LinkLBContract(req proto.LinkLBContractRequest) (proto.Order, error) {
 		}
 	}
 	if !found {
-		return order.Encode(), errors.New("contact not found")
+		return order.Encode(), proto.ContactNotFoundError
 	}
 
 	order.LBContactID = contact.Data.ContactID
 	order.LBAmount = contact.Data.AmountBTC
 	order.LBFee = contact.Data.FeeBTC
+	order.OperatorFee = order.LBAmount.Mul(decimal.NewFromFloat(conf.OperatorFee))
+	order.BotFee = order.LBAmount.Mul(decimal.NewFromFloat(conf.BotFee))
 	order.Status = proto.OrderStatus_Linked
 	order.PaymentRequisites = req.Requisites
 
+	err = db.New().Save(&order).Error
+	if err != nil {
+		log.Errorf("failed to save order %v: %v", order.ID, err)
+		return proto.Order{}, proto.DBError
+	}
+
+	return order.Encode(), nil
+}
+
+func RequestPayment(orderID uint64) (proto.Order, error) {
+	var order Order
+	err := db.New().First(&order, "id = ?", orderID).Error
+	if err != nil {
+		log.Errorf("failed to load order %v: %v", orderID, err)
+		return proto.Order{}, proto.DBError
+	}
+	order.Status = proto.OrderStatus_Payment
 	err = db.New().Save(&order).Error
 	if err != nil {
 		log.Errorf("failed to save order %v: %v", order.ID, err)

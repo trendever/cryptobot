@@ -25,8 +25,8 @@ var conf struct {
 	LBCheckTick string
 	lbCheckTick time.Duration
 
-	OperatorFee float32
-	ServiceFee  float32
+	OperatorFee float64
+	BotFee      float64
 
 	DB     db.Settings
 	Rabbit rabbit.Config

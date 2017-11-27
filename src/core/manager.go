@@ -273,7 +273,7 @@ func RejectOrder(order Order) error {
 			return err
 		}
 		go func() {
-			_, err := CancelOffer(tg.CancelOfferRequest{
+			_, err := OrderEvent(tg.OrderEventMessage{
 				ChatID: op.TelegramChat,
 				Order:  encoded,
 			})

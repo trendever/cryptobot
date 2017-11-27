@@ -8,7 +8,7 @@ import (
 
 func init() {
 	rabbit.ServeRPC(proto.SendOffer, SendOfferHandler)
-	rabbit.ServeRPC(proto.CancelOrder, CancelOfferHandler)
+	rabbit.ServeRPC(proto.OrderEvent, OrderEventHandler)
 
 	rabbit.Subscribe(
 		rabbit.Subscription{
@@ -34,7 +34,7 @@ func SendOfferHandler(req proto.SendOfferRequest) (bool, error) {
 	return true, nil
 }
 
-func CancelOfferHandler(req proto.CancelOfferRequest) (bool, error) {
+func OrderEventHandler(req proto.OrderEventMessage) (bool, error) {
 	global.events <- event{
 		ChatID: req.ChatID,
 		Data:   req.Order,

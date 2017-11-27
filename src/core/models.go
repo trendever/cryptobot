@@ -57,13 +57,19 @@ type Order struct {
 
 func (order Order) Encode() proto.Order {
 	return proto.Order{
-		ID:          order.ID,
-		ClientName:  order.ClientName,
-		Destination: order.Destination,
-		Currency:    order.Currency,
-		FiatAmount:  order.FiatAmount,
-		LBAmount:    order.LBAmount,
-		Status:      order.Status,
-		OperatorID:  order.OperatorID,
+		ID:                order.ID,
+		ClientName:        order.ClientName,
+		Destination:       order.Destination,
+		PaymentMethod:     order.PaymentMethod,
+		Currency:          order.Currency,
+		FiatAmount:        order.FiatAmount,
+		PaymentRequisites: order.PaymentRequisites,
+		LBContractID:      order.LBContactID,
+		LBAmount:          order.LBAmount,
+		LBFee:             order.LBFee,
+		OperatorFee:       order.OperatorFee,
+		BotFee:            order.BotFee,
+		Status:            order.Status,
+		OperatorID:        order.OperatorID,
 	}
 }

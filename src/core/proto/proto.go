@@ -11,7 +11,8 @@ import (
 type OperatorStatus int
 
 var (
-	DBError = errors.New("db error")
+	DBError              = errors.New("db error")
+	ContactNotFoundError = errors.New("contact not found")
 )
 
 const (
@@ -103,10 +104,15 @@ type Order struct {
 	PaymentMethod string
 	Currency      string
 	// In currency above
-	FiatAmount decimal.Decimal
-	// Value of lb contract
-	LBAmount decimal.Decimal
-	// @TODO commission-related fields?
+	FiatAmount        decimal.Decimal
+	PaymentRequisites string
+	LBContractID      uint64
+	// Value of lb contract in BTC
+	LBAmount    decimal.Decimal
+	LBFee       decimal.Decimal
+	OperatorFee decimal.Decimal
+	BotFee      decimal.Decimal
+
 	Status     OrderStatus
 	OperatorID uint64
 }
@@ -161,4 +167,9 @@ type LinkLBContractRequest struct {
 var LinkLBContact = rabbit.RPC{
 	Name:        "link_lb_contact",
 	HandlerType: (func(LinkLBContractRequest) (Order, error))(nil),
+}
+
+var RequestPayment = rabbit.RPC{
+	Name:        "request_payment",
+	HandlerType: (func(orderID uint64) (Order, error))(nil),
 }
