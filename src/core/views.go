@@ -22,6 +22,7 @@ func init() {
 	rabbit.ServeRPC(proto.DropOrder, DropOrder)
 	rabbit.ServeRPC(proto.LinkLBContact, LinkLBContract)
 	rabbit.ServeRPC(proto.RequestPayment, RequestPayment)
+	rabbit.ServeRPC(proto.CancelOrder, CancelOrder)
 }
 
 func CheckKey(key lbapi.Key) (proto.Operator, error) {
@@ -352,4 +353,26 @@ func RequestPayment(orderID uint64) (proto.Order, error) {
 	}
 
 	return order.Encode(), nil
+}
+
+func CancelOrder(orderID uint64) (bool, error) {
+	var order Order
+	err := db.New().First(&order, "id = ?", orderID).Error
+	if err != nil {
+		log.Errorf("failed to load order %v: %v", orderID, err)
+		return false, proto.DBError
+	}
+	switch order.Status {
+	case proto.OrderStatus_New, proto.OrderStatus_Accepted,
+		proto.OrderStatus_Linked, proto.OrderStatus_Payment,
+		proto.OrderStatus_Confirmation:
+	default:
+		return false, errors.New("unexpected status")
+	}
+	order.Status = proto.OrderStatus_Canceled
+	err = order.Save(db.New())
+	if err != nil {
+		return false, proto.DBError
+	}
+	return true, nil
 }

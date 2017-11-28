@@ -143,7 +143,7 @@ var CreateOrder = rabbit.RPC{
 
 var CancelOrder = rabbit.RPC{
 	Name:        "cancel_order",
-	HandlerType: (func(Order) (Order, error))(nil),
+	HandlerType: (func(orderID uint64) (Order, error))(nil),
 	Timeout:     time.Second * 5,
 }
 
