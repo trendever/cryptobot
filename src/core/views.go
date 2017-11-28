@@ -197,9 +197,8 @@ func CreateOrder(req proto.Order) (proto.Order, error) {
 		// At this point it only determines required deposit. So we will refer to the best offer.
 		LBAmount: req.FiatAmount.Div(node.Minimal),
 	}
-	err = db.New().Save(&order).Error
+	err = order.Save(db.New())
 	if err != nil {
-		log.Errorf("failed to save new order: %v", err)
 		return proto.Order{}, proto.DBError
 	}
 
@@ -276,9 +275,8 @@ func DropOrder(req proto.DropOrderRequest) (bool, error) {
 
 	tx := db.NewTransaction()
 	order.Status = proto.OrderStatus_Dropped
-	err = tx.Save(&order).Error
+	err = order.Save(tx)
 	if err != nil {
-		log.Errorf("failed to save order %v: %v", order.ID, err)
 		return false, proto.DBError
 	}
 	err = tx.Model(&op).Update("status", proto.OperatorStatus_Inactive).Error
@@ -332,9 +330,8 @@ func LinkLBContract(req proto.LinkLBContractRequest) (proto.Order, error) {
 	order.Status = proto.OrderStatus_Linked
 	order.PaymentRequisites = req.Requisites
 
-	err = db.New().Save(&order).Error
+	err = order.Save(db.New())
 	if err != nil {
-		log.Errorf("failed to save order %v: %v", order.ID, err)
 		return proto.Order{}, proto.DBError
 	}
 
@@ -349,9 +346,8 @@ func RequestPayment(orderID uint64) (proto.Order, error) {
 		return proto.Order{}, proto.DBError
 	}
 	order.Status = proto.OrderStatus_Payment
-	err = db.New().Save(&order).Error
+	err = order.Save(db.New())
 	if err != nil {
-		log.Errorf("failed to save order %v: %v", order.ID, err)
 		return proto.Order{}, proto.DBError
 	}
 

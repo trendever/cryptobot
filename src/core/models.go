@@ -2,10 +2,22 @@ package main
 
 import (
 	"common/db"
+	"common/log"
+	"common/rabbit"
 	"core/proto"
+	"github.com/jinzhu/gorm"
 	"github.com/shopspring/decimal"
 	"lbapi"
 )
+
+func init() {
+	rabbit.AddPublishers(rabbit.Publisher{
+		Name:   "order_event",
+		Routes: []rabbit.Route{proto.OrderEventRoute},
+		// Most of listenrs will have autodelete queues, maybe there is no need in confirm
+		Confirm: true,
+	})
+}
 
 type TransactionDirection int
 
@@ -53,6 +65,22 @@ type Order struct {
 	BotFee      decimal.Decimal `gorm:"type:decimal"`
 	Status      proto.OrderStatus
 	OperatorID  uint64
+}
+
+func (order *Order) Save(db *gorm.DB) error {
+	err := db.Save(order).Error
+	if err != nil {
+		log.Errorf("failed to save order %v: %v", order.ID, err)
+		return err
+	}
+	err = rabbit.Publish("order_event", "", order)
+	if err != nil {
+		log.Errorf("failed to send order event: %v", err)
+		// Still saved, so it kind of success
+		// In other hand transaction could be passed here...
+		// return err
+	}
+	return nil
 }
 
 func (order Order) Encode() proto.Order {

@@ -117,8 +117,32 @@ type Order struct {
 	OperatorID uint64
 }
 
+var OrderEventRoute = rabbit.Route{
+	{
+		Node: rabbit.Exchange{
+			Name:    "order_event",
+			Kind:    "fanout",
+			Durable: true,
+		},
+	},
+	{
+		Keys: []string{""},
+		Node: rabbit.Queue{
+			Name:       "",
+			Exclusive:  true,
+			AutoDelete: true,
+		},
+	},
+}
+
 var CreateOrder = rabbit.RPC{
 	Name:        "create_order",
+	HandlerType: (func(Order) (Order, error))(nil),
+	Timeout:     time.Second * 5,
+}
+
+var CancelOrder = rabbit.RPC{
+	Name:        "cancel_order",
 	HandlerType: (func(Order) (Order, error))(nil),
 	Timeout:     time.Second * 5,
 }

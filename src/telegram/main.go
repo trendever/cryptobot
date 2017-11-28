@@ -11,8 +11,6 @@ import (
 	"time"
 )
 
-type service struct{}
-
 const DiscardMessageTimeout = time.Hour * 24
 
 var conf struct {
@@ -47,6 +45,8 @@ var SendMessage func(recipient telebot.Recipient, message string, options *teleb
 func main() {
 	cli.Main(service{})
 }
+
+type service struct{}
 
 func (srv service) Load() {
 	log.Fatal(config.LoadStruct("telegram", &conf))

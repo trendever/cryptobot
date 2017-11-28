@@ -209,9 +209,8 @@ func (man *orderManager) acceptOrder(accept accept) {
 
 	order.OperatorID = op.ID
 	order.Status = proto.OrderStatus_Accepted
-	err = tx.Save(&order).Error
+	err = order.Save(tx)
 	if err != nil {
-		log.Errorf("failed to save order: %v", err)
 		accept.reply <- acceptReply{
 			err: errors.New("db error"),
 		}
@@ -251,7 +250,7 @@ func OfferOrder(op Operator, order Order) error {
 func RejectOrder(order Order) error {
 	order.Status = proto.OrderStatus_Rejected
 	tx := db.NewTransaction()
-	err := tx.Save(order).Error
+	err := order.Save(tx)
 	if err != nil {
 		tx.Rollback()
 		return err
