@@ -1,6 +1,7 @@
 package main
 
 import (
+	"common/log"
 	"common/rabbit"
 	"common/soso"
 	"core/proto"
@@ -17,6 +18,7 @@ func init() {
 }
 
 func OrderEventHandler(order proto.Order) bool {
+	log.Debug("order event: %+v", order)
 	ctx := soso.NewRemoteContext("order", "event", map[string]interface{}{
 		"order": order,
 	})

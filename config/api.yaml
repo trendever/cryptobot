@@ -1,0 +1,5 @@
+listen: :8083
+debug: true
+
+rabbit:
+  URL: "amqp://guest:guest@rabbit"

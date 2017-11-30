@@ -14,13 +14,12 @@ import (
 )
 
 var conf struct {
-	Rabbit rabbit.Config
 	Listen string
+
+	Rabbit rabbit.Config
 
 	Debug     bool
 	SentryDSN string
-
-	Messages map[string]string
 }
 
 func main() {

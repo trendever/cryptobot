@@ -13,6 +13,7 @@ services:
     networks:
       - crypto
     command: sh -c './bin/core migrate && exec ./bin/core start'
+
   tg:
     image: debian:stretch
     volumes:
@@ -24,6 +25,16 @@ services:
     networks:
       - crypto
     command: sh -c 'exec ./bin/telegram start'
+
+  api:
+    image: debian:stretch
+    working_dir: /services/
+    volumes:
+      - .:/services:rw
+    networks:
+      - crypto
+    command: ./bin/api start
+
   db:
     image: "postgres:9-alpine"
     environment:
@@ -35,6 +46,7 @@ services:
       - crypto
     ports:
       - 127.0.0.1:5433:5432
+
   rabbit:
     image: "rabbitmq:3-management-alpine"
     volumes:
