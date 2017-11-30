@@ -20,6 +20,11 @@ var SosoRoutes = []soso.Route{
 		Method:  "get",
 		Handler: GetOrderHandler,
 	},
+	{
+		Domain:  "order",
+		Method:  "cancel",
+		Handler: CancelOrderHandler,
+	},
 }
 
 func GetOrderHandler(c *soso.Context, arg *struct {
@@ -87,7 +92,7 @@ func CreateOrderHandler(c *soso.Context, arg *struct {
 
 func CancelOrderHandler(c *soso.Context, arg *struct {
 	OrderID uint64 `json:"order_id"`
-	Addess  string `json:"addess"`
+	Address string `json:"address"`
 }) {
 	if arg.OrderID == 0 {
 		c.ErrorResponse(http.StatusBadRequest, soso.LevelError, errors.New("bad request"))
@@ -105,12 +110,51 @@ func CancelOrderHandler(c *soso.Context, arg *struct {
 		return
 	}
 
-	if order.Destination != arg.Addess {
+	if order.Destination != arg.Address {
 		c.ErrorResponse(http.StatusForbidden, soso.LevelError, errors.New("forbidden"))
 		return
 	}
 
 	_, err = CancelOrder(order.ID)
+	if err != nil {
+		err := err.(rabbit.RPCError)
+		if err.Kind != rabbit.RPCError_Forwarded {
+			c.ErrorResponse(http.StatusInternalServerError, soso.LevelError, errors.New("service unavailable"))
+			return
+		}
+		c.ErrorResponse(http.StatusInternalServerError, soso.LevelError, err)
+		return
+	}
+
+	c.SuccessResponse("success")
+}
+
+func MarkPayedHandler(c *soso.Context, arg *struct {
+	OrderID uint64 `json:"order_id"`
+	Address string `json:"address"`
+}) {
+	if arg.OrderID == 0 {
+		c.ErrorResponse(http.StatusBadRequest, soso.LevelError, errors.New("bad request"))
+		return
+	}
+
+	order, err := GetOrder(arg.OrderID)
+	if err != nil {
+		err := err.(rabbit.RPCError)
+		if err.Kind != rabbit.RPCError_Forwarded {
+			c.ErrorResponse(http.StatusInternalServerError, soso.LevelError, errors.New("service unavailable"))
+			return
+		}
+		c.ErrorResponse(http.StatusInternalServerError, soso.LevelError, err)
+		return
+	}
+
+	if order.Destination != arg.Address {
+		c.ErrorResponse(http.StatusForbidden, soso.LevelError, errors.New("forbidden"))
+		return
+	}
+
+	_, err = MarkPayed(order.ID)
 	if err != nil {
 		err := err.(rabbit.RPCError)
 		if err.Kind != rabbit.RPCError_Forwarded {

@@ -17,6 +17,7 @@ var GetOrder func(id uint64) (proto.Order, error)
 var DropOrder func(proto.DropOrderRequest) (bool, error)
 var LinkLBContact func(proto.LinkLBContractRequest) (proto.Order, error)
 var RequestPayment func(orderID uint64) (proto.Order, error)
+var ConfirmPayment func(orderID uint64) (bool, error)
 
 func init() {
 	rabbit.DeclareRPC(proto.CheckKey, &CheckKey)
@@ -30,4 +31,5 @@ func init() {
 	rabbit.DeclareRPC(proto.DropOrder, &DropOrder)
 	rabbit.DeclareRPC(proto.LinkLBContact, &LinkLBContact)
 	rabbit.DeclareRPC(proto.RequestPayment, &RequestPayment)
+	rabbit.DeclareRPC(proto.ConfirmPayment, &ConfirmPayment)
 }

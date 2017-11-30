@@ -275,7 +275,7 @@ func serveOrderEnter(s *Session) {
 		log.Error(SendMessage(s.Dest(), "wait for payment", Keyboard()))
 
 	case proto.OrderStatus_Confirmation:
-		// @TODO ...
+		log.Error(SendMessage(s.Dest(), M("client marked order as payed"), Keyboard(M("confirm"))))
 	}
 }
 
@@ -314,7 +314,18 @@ func serveOrderEvent(s *Session, event interface{}) {
 		s.ChangeState(State_WaitForOrders)
 
 	case proto.OrderStatus_Confirmation:
-		// @TODO
+		log.Error(SendMessage(s.Dest(), M("client marked order as payed"), Keyboard(M("confirm"))))
+
+	case proto.OrderStatus_Finished:
+		amount := order.LBAmount.Sub(order.LBFee).Sub(order.OperatorFee)
+		log.Error(SendMessage(
+			s.Dest(),
+			M("order is finished")+"\n"+
+				M(fmt.Sprintf("%v BTC was writed-off from you deposit", amount))+"\n"+
+				M(fmt.Sprintf("your fee was %v", order.OperatorFee)),
+			Keyboard(M("confirm")),
+		))
+		s.ChangeState(State_WaitForOrders)
 
 	default:
 		log.Warn("got order %v with unxepected status %v in WaitForOrders", order.ID, order.Status)
@@ -330,7 +341,7 @@ func serveOrderEvent(s *Session, event interface{}) {
 			fmt.Sprintf(M("order %v entered unexped state"), order.ID),
 			Keyboard(M("cancel")),
 		))
-		s.context = nil
+		s.ChangeState(State_Unavailable)
 	}
 }
 
@@ -392,6 +403,21 @@ func serveOrderMessage(s *Session, msg *telebot.Message) {
 			log.Errorf("failed to link lb contact for order %v: %v", order.ID, err)
 			s.ChangeState(State_Unavailable)
 		}
+
+	case proto.OrderStatus_Payment:
+		log.Error(SendMessage(s.Dest(), M("wait for payment"), Keyboard()))
+
+	case proto.OrderStatus_Confirmation:
+		if msg.Text == M("confirm") {
+			_, err := ConfirmPayment(order.ID)
+			if err != nil {
+				s.ChangeState(State_Unavailable)
+				return
+			}
+			log.Error(SendMessage(s.Dest(), M("wait for finish of transaction"), Keyboard()))
+			return
+		}
+		log.Error(SendMessage(s.Dest(), M("client marked order as payed"), Keyboard(M("confirm"))))
 
 	default:
 		s.ChangeState(State_Unavailable)

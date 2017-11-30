@@ -202,3 +202,13 @@ var RequestPayment = rabbit.RPC{
 	Name:        "request_payment",
 	HandlerType: (func(orderID uint64) (Order, error))(nil),
 }
+
+var MarkPayed = rabbit.RPC{
+	Name:        "mark_payed",
+	HandlerType: (func(orderID uint64) (bool, error))(nil),
+}
+
+var ConfirmPayment = rabbit.RPC{
+	Name:        "confirm_payment",
+	HandlerType: (func(orderID uint64) (bool, error))(nil),
+}

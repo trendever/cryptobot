@@ -6,6 +6,7 @@ import (
 	"common/rabbit"
 	"core/proto"
 	"errors"
+	"github.com/jinzhu/gorm"
 	"github.com/shopspring/decimal"
 	"lbapi"
 )
@@ -24,6 +25,8 @@ func init() {
 	rabbit.ServeRPC(proto.LinkLBContact, LinkLBContract)
 	rabbit.ServeRPC(proto.RequestPayment, RequestPayment)
 	rabbit.ServeRPC(proto.CancelOrder, CancelOrder)
+	rabbit.ServeRPC(proto.MarkPayed, MarkPayed)
+	rabbit.ServeRPC(proto.ConfirmPayment, ConfirmPayment)
 }
 
 func CheckKey(key lbapi.Key) (proto.Operator, error) {
@@ -384,6 +387,59 @@ func CancelOrder(orderID uint64) (bool, error) {
 	}
 	order.Status = proto.OrderStatus_Canceled
 	err = order.Save(db.New())
+	if err != nil {
+		return false, errors.New(proto.DBError)
+	}
+	return true, nil
+}
+
+func MarkPayed(orderID uint64) (bool, error) {
+	var order Order
+	err := db.New().First(&order, "id = ?", orderID).Error
+	if err != nil {
+		log.Errorf("failed to load order %v: %v", orderID, err)
+		return false, errors.New(proto.DBError)
+	}
+	if order.Status != proto.OrderStatus_Payment && order.Status != proto.OrderStatus_Confirmation {
+		return false, errors.New("unexpected status")
+	}
+	order.Status = proto.OrderStatus_Confirmation
+	err = order.Save(db.New())
+	if err != nil {
+		return false, errors.New(proto.DBError)
+	}
+	return true, nil
+}
+
+func ConfirmPayment(orderID uint64) (bool, error) {
+	var order Order
+	err := db.New().First(&order, "id = ?", orderID).Error
+	if err != nil {
+		log.Errorf("failed to load order %v: %v", orderID, err)
+		return false, errors.New(proto.DBError)
+	}
+	if order.Status != proto.OrderStatus_Confirmation {
+		return false, errors.New("unexpected status")
+	}
+
+	var op Operator
+	err = db.New().First(&op, "id = ?", order.OperatorID).Error
+	if err != nil {
+		log.Errorf("failed to load operator %v: %v", order.OperatorID, err)
+		return false, errors.New(proto.DBError)
+	}
+
+	tx := db.NewTransaction()
+	// Amount to write-off from op deposit: contact_sum - lb_fee - op_fee
+	amount := order.LBAmount.Sub(order.LBFee).Sub(order.OperatorFee)
+	err = tx.Model(&op).Update("deposit", gorm.Expr("deposit - ?", amount)).Error
+	if err != nil {
+		tx.Rollback()
+		return false, errors.New(proto.DBError)
+	}
+	// @TODO Transfer coins to client from bs buffer
+	order.Status = proto.OrderStatus_Finished
+	err = order.Save(tx)
 	if err != nil {
 		return false, errors.New(proto.DBError)
 	}
