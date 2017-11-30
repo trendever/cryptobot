@@ -45,7 +45,7 @@ func CheckKey(key lbapi.Key) (proto.Operator, error) {
 		}, nil
 	case scope.Error != nil:
 		log.Errorf("failed to load operator '%v': %v", acc.Username, scope.Error)
-		return proto.Operator{}, proto.DBError
+		return proto.Operator{}, errors.New(proto.DBError)
 	}
 
 	// Just for encoding, do not save yet
@@ -64,23 +64,23 @@ func OperatorByTg(chatID int64) (proto.Operator, error) {
 
 	case scope.Error != nil:
 		log.Errorf("failed to load operator for chat %v: %v", chatID, scope.Error)
-		return proto.Operator{}, proto.DBError
+		return proto.Operator{}, errors.New(proto.DBError)
 	}
 
 	return op.Encode(), nil
 }
 
-func OperatorByID(operatorID uint64) (proto.Operator, error) {
+func OperatorByID(operatopID uint64) (proto.Operator, error) {
 	var op Operator
-	scope := db.New().First(&op, "id = ?", operatorID)
+	scope := db.New().First(&op, "id = ?", operatopID)
 	switch {
 	case scope.RecordNotFound():
-		log.Debug("operator %v not found", operatorID)
+		log.Debug("operator %v not found", operatopID)
 		return proto.Operator{}, nil
 
 	case scope.Error != nil:
-		log.Errorf("failed to load operator %v: %v", operatorID, scope.Error)
-		return proto.Operator{}, proto.DBError
+		log.Errorf("failed to load operator %v: %v", operatopID, scope.Error)
+		return proto.Operator{}, errors.New(proto.DBError)
 	}
 
 	return op.Encode(), nil
@@ -91,7 +91,7 @@ func SetOperatorStatus(req proto.SetOperatorStatusRequest) (bool, error) {
 	err := db.New().First(&op, "telegram_chat = ?", req.ChatID).Error
 	if err != nil {
 		log.Errorf("failed to load operator for chat %v: %v", req.ChatID, err)
-		return false, proto.DBError
+		return false, errors.New(proto.DBError)
 	}
 	if op.Status == proto.OperatorStatus_Busy {
 		return false, errors.New("operator is busy")
@@ -105,7 +105,7 @@ func SetOperatorStatus(req proto.SetOperatorStatusRequest) (bool, error) {
 	err = db.New().Model(&op).Updates(updMap).Error
 	if err != nil {
 		log.Errorf("failed to update operator status: %v", err)
-		return false, proto.DBError
+		return false, errors.New(proto.DBError)
 	}
 	if req.Status == proto.OperatorStatus_Ready {
 		manager.PushOperator(op)
@@ -136,7 +136,7 @@ func SetOperatorKey(req proto.SetOperatorKeyRequest) (proto.Operator, error) {
 
 	case scope.Error != nil:
 		log.Errorf("failed to load operator '%v': %v", acc.Username, scope.Error)
-		return proto.Operator{}, proto.DBError
+		return proto.Operator{}, errors.New(proto.DBError)
 
 	default:
 		if op.TelegramChat != req.ChatID {
@@ -152,7 +152,7 @@ func SetOperatorKey(req proto.SetOperatorKeyRequest) (proto.Operator, error) {
 
 	if err != nil {
 		log.Errorf("failed to save operator %v: %v", op.ID, err)
-		return proto.Operator{}, proto.DBError
+		return proto.Operator{}, errors.New(proto.DBError)
 	}
 
 	return proto.Operator{
@@ -202,7 +202,7 @@ func CreateOrder(req proto.Order) (proto.Order, error) {
 	}
 	err = order.Save(db.New())
 	if err != nil {
-		return proto.Order{}, proto.DBError
+		return proto.Order{}, errors.New(proto.DBError)
 	}
 
 	manager.PushOrder(order)
@@ -218,7 +218,7 @@ func GetOrder(id uint64) (proto.Order, error) {
 	}
 	if scope.Error != nil {
 		log.Errorf("failed to load order %v: %v", id, scope.Error)
-		return proto.Order{}, proto.DBError
+		return proto.Order{}, errors.New(proto.DBError)
 	}
 	return order.Encode(), nil
 }
@@ -233,7 +233,7 @@ func SkipOffer(req proto.SkipOfferRequest) (bool, error) {
 	err := db.New().First(&op, "id = ?", req.OperatorID).Error
 	if err != nil {
 		log.Errorf("failed to load operator %v: %v", req.OperatorID, err)
-		return false, proto.DBError
+		return false, errors.New(proto.DBError)
 	}
 	if op.Status != proto.OperatorStatus_Proposal || op.CurrentOrder != req.OrderID {
 		log.Debug("operator %v tried to skip offer %v while his current status was %v, order %v",
@@ -246,7 +246,7 @@ func SkipOffer(req proto.SkipOfferRequest) (bool, error) {
 	}).Error
 	if err != nil {
 		log.Errorf("failed to save operator %v: %v", op.ID, err)
-		return false, proto.DBError
+		return false, errors.New(proto.DBError)
 	}
 	manager.PushOperator(op)
 	return true, nil
@@ -257,7 +257,7 @@ func DropOrder(req proto.DropOrderRequest) (bool, error) {
 	err := db.New().First(&op, "id = ?", req.OperatorID).Error
 	if err != nil {
 		log.Errorf("failed to load operator %v: %v", req.OperatorID, err)
-		return false, proto.DBError
+		return false, errors.New(proto.DBError)
 	}
 	if op.Status != proto.OperatorStatus_Busy || op.CurrentOrder != req.OrderID {
 		log.Debug("operator %v tried to drop order %v while his current status was %v, order %v",
@@ -268,7 +268,7 @@ func DropOrder(req proto.DropOrderRequest) (bool, error) {
 	err = db.New().First(&order, "id = ?", req.OrderID).Error
 	if err != nil {
 		log.Errorf("failed to load order %v: %v", req.OrderID, err)
-		return false, proto.DBError
+		return false, errors.New(proto.DBError)
 	}
 	if order.Status != proto.OrderStatus_Accepted && order.Status != proto.OrderStatus_Linked {
 		log.Debug("operator %v tried to drop order %v while order had status %v",
@@ -280,12 +280,24 @@ func DropOrder(req proto.DropOrderRequest) (bool, error) {
 	order.Status = proto.OrderStatus_Dropped
 	err = order.Save(tx)
 	if err != nil {
-		return false, proto.DBError
+		tx.Rollback()
+		return false, errors.New(proto.DBError)
 	}
-	err = tx.Model(&op).Update("status", proto.OperatorStatus_Inactive).Error
+	err = tx.Model(&op).Updates(map[string]interface{}{
+		"status":        proto.OperatorStatus_Inactive,
+		"current_order": 0,
+	}).Error
 	if err != nil {
 		log.Errorf("failed to save operator %v: %v", op.ID, err)
-		return false, proto.DBError
+		tx.Rollback()
+		return false, errors.New(proto.DBError)
+	}
+
+	err = tx.Commit().Error
+	if err != nil {
+		log.Errorf("failed to commit: %v", err)
+		tx.Rollback()
+		return false, errors.New(proto.DBError)
 	}
 	return true, nil
 }
@@ -298,7 +310,7 @@ func LinkLBContract(req proto.LinkLBContractRequest) (proto.Order, error) {
 	err := db.New().First(&order, "id = ?", req.OrderID).Error
 	if err != nil {
 		log.Errorf("failed to load order %v: %v", req.OrderID, err)
-		return proto.Order{}, proto.DBError
+		return proto.Order{}, errors.New(proto.DBError)
 	}
 
 	if order.Status != proto.OrderStatus_Accepted && order.Status != proto.OrderStatus_Linked {
@@ -309,7 +321,7 @@ func LinkLBContract(req proto.LinkLBContractRequest) (proto.Order, error) {
 	err = db.New().First(&op, "id = ?", order.OperatorID).Error
 	if err != nil {
 		log.Errorf("failed to load operator %v: %v", order.OperatorID, err)
-		return proto.Order{}, proto.DBError
+		return proto.Order{}, errors.New(proto.DBError)
 	}
 
 	contacts, err := op.Key.ActiveContacts()
@@ -322,7 +334,7 @@ func LinkLBContract(req proto.LinkLBContractRequest) (proto.Order, error) {
 		}
 	}
 	if !found {
-		return order.Encode(), proto.ContactNotFoundError
+		return order.Encode(), errors.New(proto.ContactNotFoundError)
 	}
 
 	order.LBContactID = contact.Data.ContactID
@@ -335,7 +347,7 @@ func LinkLBContract(req proto.LinkLBContractRequest) (proto.Order, error) {
 
 	err = order.Save(db.New())
 	if err != nil {
-		return proto.Order{}, proto.DBError
+		return proto.Order{}, errors.New(proto.DBError)
 	}
 
 	return order.Encode(), nil
@@ -346,12 +358,12 @@ func RequestPayment(orderID uint64) (proto.Order, error) {
 	err := db.New().First(&order, "id = ?", orderID).Error
 	if err != nil {
 		log.Errorf("failed to load order %v: %v", orderID, err)
-		return proto.Order{}, proto.DBError
+		return proto.Order{}, errors.New(proto.DBError)
 	}
 	order.Status = proto.OrderStatus_Payment
 	err = order.Save(db.New())
 	if err != nil {
-		return proto.Order{}, proto.DBError
+		return proto.Order{}, errors.New(proto.DBError)
 	}
 
 	return order.Encode(), nil
@@ -362,7 +374,7 @@ func CancelOrder(orderID uint64) (bool, error) {
 	err := db.New().First(&order, "id = ?", orderID).Error
 	if err != nil {
 		log.Errorf("failed to load order %v: %v", orderID, err)
-		return false, proto.DBError
+		return false, errors.New(proto.DBError)
 	}
 	switch order.Status {
 	case proto.OrderStatus_New, proto.OrderStatus_Accepted,
@@ -374,7 +386,7 @@ func CancelOrder(orderID uint64) (bool, error) {
 	order.Status = proto.OrderStatus_Canceled
 	err = order.Save(db.New())
 	if err != nil {
-		return false, proto.DBError
+		return false, errors.New(proto.DBError)
 	}
 	return true, nil
 }

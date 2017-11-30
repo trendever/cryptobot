@@ -243,12 +243,40 @@ var statesInit = map[State]StateActions{
 	},
 
 	State_ServeOrder: {
-		Enter: func(s *Session) {
-			log.Error(SendMessage(s.Dest(), M("create lb contact and input requisites here"), Keyboard(M("drop"))))
-		},
+		Enter:   serveOrderEnter,
 		Message: serveOrderMessage,
 		Event:   serveOrderEvent,
 	},
+}
+
+func serveOrderEnter(s *Session) {
+	order, err := GetOrder(s.Operator.CurrentOrder)
+	if err != nil {
+		log.Errorf("failed to load order %v: %v", s.Operator.CurrentOrder, err)
+		s.ChangeState(State_Unavailable)
+		return
+	}
+
+	s.context = order
+
+	switch order.Status {
+	case proto.OrderStatus_Accepted:
+		// @TODO (re-)send order info?
+		log.Error(SendMessage(s.Dest(), M("create lb contact and input requisites here"), Keyboard(M("drop"))))
+
+	case proto.OrderStatus_Linked:
+		log.Error(SendMessage(s.Dest(), fmt.Sprintf(
+			M("lb link: %v\ncontact amount: %v\nrequsites:\n%v"),
+			fmt.Sprintf("https://localbitcoins.com/request/online_sell_buyer/%v", order.LBContractID),
+			order.LBAmount, order.PaymentRequisites,
+		), Keyboard(M("confirm"), M("drop"))))
+
+	case proto.OrderStatus_Payment:
+		log.Error(SendMessage(s.Dest(), "wait for payment", Keyboard()))
+
+	case proto.OrderStatus_Confirmation:
+		// @TODO ...
+	}
 }
 
 func serveOrderEvent(s *Session, event interface{}) {
@@ -318,9 +346,13 @@ func serveOrderMessage(s *Session, msg *telebot.Message) {
 			OrderID:    order.ID,
 		})
 		if err != nil {
+			log.Errorf("failed to drop order %v: %v", order.ID, err)
 			s.ChangeState(State_Unavailable)
 			return
 		}
+		// @TODO send something?
+		s.ChangeState(State_Start)
+		return
 	}
 	switch order.Status {
 	case proto.OrderStatus_Linked:
@@ -337,12 +369,13 @@ func serveOrderMessage(s *Session, msg *telebot.Message) {
 		fallthrough
 
 	case proto.OrderStatus_Accepted:
-		order, err := LinkLBContact(proto.LinkLBContractRequest{
-			OrderID:    s.Operator.ID,
+		ret, err := LinkLBContact(proto.LinkLBContractRequest{
+			OrderID:    order.ID,
 			Requisites: msg.Text,
 		})
-		switch err {
-		case nil:
+		switch {
+		case err == nil:
+			order = ret
 			s.context = order
 			log.Error(SendMessage(s.Dest(), fmt.Sprintf(
 				M("lb link: %v\ncontact amount: %v\nrequsites:\n%v"),
@@ -351,9 +384,10 @@ func serveOrderMessage(s *Session, msg *telebot.Message) {
 			), Keyboard(M("confirm"), M("drop"))))
 
 		// @TODO Do we need a way to exchange without contact?
-		case proto.ContactNotFoundError:
+		case err.Error() == proto.ContactNotFoundError:
 			log.Error(SendMessage(s.Dest(), M("related lb contact not found"), Keyboard(M("drop"))))
 		default:
+			log.Errorf("failed to link lb contact for order %v: %v", order.ID, err)
 			s.ChangeState(State_Unavailable)
 		}
 
@@ -441,7 +475,7 @@ func M(key string) string {
 	if ok {
 		return msg
 	}
-	log.Warn("message for key '%v' is undefined", key)
+	//log.Warn("message for key '%v' is undefined", key)
 	return key
 }
 

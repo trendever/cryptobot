@@ -100,12 +100,7 @@ func (s *Session) StateFromOpStatus() {
 		}
 		s.context = order
 	case proto.OperatorStatus_Busy:
-		s.State = State_ServeOrder
-		order, err := GetOrder(s.Operator.CurrentOrder)
-		if err != nil {
-			log.Errorf("failed to load order %v: %v", s.Operator.CurrentOrder, err)
-		}
-		s.context = order
+		s.ChangeState(State_ServeOrder)
 	case proto.OperatorStatus_Utility:
 		s.ChangeState(State_InterruptedAction)
 	default:

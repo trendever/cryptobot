@@ -2,7 +2,6 @@ package proto
 
 import (
 	"common/rabbit"
-	"errors"
 	"github.com/shopspring/decimal"
 	"lbapi"
 	"time"
@@ -11,8 +10,8 @@ import (
 type OperatorStatus int
 
 var (
-	DBError              = errors.New("db error")
-	ContactNotFoundError = errors.New("contact not found")
+	DBError              = "db error"
+	ContactNotFoundError = "contact not found"
 )
 
 const (
@@ -196,6 +195,7 @@ type LinkLBContractRequest struct {
 var LinkLBContact = rabbit.RPC{
 	Name:        "link_lb_contact",
 	HandlerType: (func(LinkLBContractRequest) (Order, error))(nil),
+	Timeout:     time.Second * 10,
 }
 
 var RequestPayment = rabbit.RPC{

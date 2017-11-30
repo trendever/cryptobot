@@ -85,6 +85,7 @@ func (order *Order) Save(db *gorm.DB) error {
 		log.Errorf("failed to save order %v: %v", order.ID, err)
 		return err
 	}
+
 	err = rabbit.Publish("order_event", "", order)
 	if err != nil {
 		log.Errorf("failed to send order event: %v", err)
