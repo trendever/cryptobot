@@ -152,8 +152,8 @@ var statesInit = map[State]StateActions{
 					log.Error(SendMessage(s.Dest(), M(err.Error()), Keyboard(M("cancel"))))
 					return
 				}
+				s.Operator.CurrentOrder = order.ID
 				s.ChangeState(State_ServeOrder)
-				s.context = order
 				return
 
 			case M("skip"):
@@ -295,6 +295,8 @@ func serveOrderEvent(s *Session, event interface{}) {
 	}
 
 	switch order.Status {
+	case proto.OrderStatus_Accepted:
+		// Does not matter, that is result of our accept actuality
 	case proto.OrderStatus_Canceled:
 		log.Error(SendMessage(
 			s.Dest(),

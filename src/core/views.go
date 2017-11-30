@@ -241,8 +241,7 @@ func SkipOffer(req proto.SkipOfferRequest) (bool, error) {
 		return false, errors.New("unexpected status")
 	}
 	err = db.New().Model(&op).Updates(map[string]interface{}{
-		"status":        proto.OperatorStatus_Ready,
-		"current_order": 0,
+		"status": proto.OperatorStatus_Ready,
 	}).Error
 	if err != nil {
 		log.Errorf("failed to save operator %v: %v", op.ID, err)

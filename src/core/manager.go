@@ -93,19 +93,24 @@ func (man *orderManager) loop() {
 			}
 
 		case op := <-man.operators:
-			sended := false
+			var lacked decimal.Decimal
 			for _, order := range man.waiters {
 				if op.Deposit.Cmp(order.LBAmount) > 0 {
+					// This order was skipped by operator already
+					if op.CurrentOrder >= order.ID {
+						continue
+					}
 					err := OfferOrder(op, order)
 					if err != nil {
 						log.Errorf("failed to send offer to %v: %v", op.ID, err)
 					}
-					sended = true
 					break
+				} else {
+					lacked = order.LBAmount
 				}
 			}
-			if !sended && len(man.waiters) != 0 {
-				go NotifyLackOfDeposit(op, man.waiters[0].LBAmount)
+			if lacked.Sign() > 0 {
+				go NotifyLackOfDeposit(op, lacked)
 			}
 
 		case accept := <-man.accepts:
@@ -197,7 +202,7 @@ func (man *orderManager) acceptOrder(accept accept) {
 		return
 	}
 
-	err := tx.Update(&op).Update("status", proto.OperatorStatus_Busy).Error
+	err := tx.Model(&op).Update("status", proto.OperatorStatus_Busy).Error
 	if err != nil {
 		log.Errorf("failed to save operator: %v", err)
 		accept.reply <- acceptReply{
