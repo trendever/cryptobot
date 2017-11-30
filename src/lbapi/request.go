@@ -431,6 +431,14 @@ func (key Key) contactsList(baseURL string) ([]Contact, error) {
 	return ret, nil
 }
 
+func (key Key) ContactInfo(contactID uint64) (Contact, error) {
+	var ret Contact
+	// @TODO We will not get "actions" in this way,
+	// but most of time we do not need them and i'm tired of fighting this "awesome" api
+	_, err := key.DecodedRequest("GET", fmt.Sprintf("/api/contact_info/%v/", contactID), "", &ret.Data)
+	return ret, err
+}
+
 func (key Key) ActiveContacts() ([]Contact, error) {
 	return key.contactsList("/api/dashboard/")
 }
