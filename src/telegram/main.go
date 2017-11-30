@@ -24,8 +24,9 @@ var conf struct {
 }
 
 type event struct {
-	ChatID int64
-	Data   interface{}
+	ChatID     int64
+	OperatorID uint64
+	Data       interface{}
 }
 
 var global = struct {
@@ -34,10 +35,13 @@ var global = struct {
 	waitGroup sync.WaitGroup
 	events    chan event
 	sessions  map[int64]*Session
+	// Operator id -> chat id for loaded sessions
+	opMap map[uint64]int64
 }{
 	stopper:  stopper.NewStopper(),
 	events:   make(chan event, 10),
 	sessions: make(map[int64]*Session),
+	opMap:    make(map[uint64]int64),
 }
 
 var SendMessage func(recipient telebot.Recipient, message string, options *telebot.SendOptions) error
@@ -98,9 +102,9 @@ func Listen() {
 				continue
 			}
 			log.Debug(
-				"got message from chat %v(%v):\n%v",
+				"got message from chat %v(%v):\n%+v",
 				message.Chat.ID, message.Chat.Destination(),
-				log.IndentEncode(message),
+				message,
 			)
 			if !message.IsPersonal() {
 				continue
@@ -111,7 +115,15 @@ func Listen() {
 				session.PushMessage(message)
 			}
 		case event := <-global.events:
-			session := getSession(event.ChatID, true)
+			var session *Session
+			switch {
+			case event.OperatorID != 0:
+				session = sessionByOp(event.OperatorID, false)
+			case event.ChatID != 0:
+				session = getSession(event.ChatID, true)
+			default:
+				log.Errorf("got event with operator and chat id both zero")
+			}
 			if session != nil {
 				session.PushEvent(event.Data)
 			}
@@ -119,11 +131,29 @@ func Listen() {
 	}
 }
 
+func sessionByOp(operatorID uint64, notifyError bool) *Session {
+	chatID, ok := global.opMap[operatorID]
+	if ok {
+		return getSession(chatID, notifyError)
+	}
+	session, err := LoadSessionForOperator(operatorID)
+	if err != nil {
+		log.Errorf("failed to load session for operator %v: %v", operatorID, err)
+		return nil
+	}
+	chatID = session.Operator.TelegramChat
+	global.sessions[chatID] = session
+	if session.Operator.ID != 0 {
+		global.opMap[session.Operator.ID] = chatID
+	}
+	return session
+}
+
 func getSession(chatID int64, notifyError bool) *Session {
 	session, ok := global.sessions[chatID]
 	if !ok {
 		var err error
-		session, err = LoadSession(chatID)
+		session, err = LoadSessionForChat(chatID)
 		if err != nil {
 			log.Errorf("failed to load session for chat %v: %v", chatID, err)
 			if notifyError {
@@ -133,6 +163,9 @@ func getSession(chatID int64, notifyError bool) *Session {
 		}
 		// @TODO unload session on timeout?
 		global.sessions[chatID] = session
+		if session.Operator.ID != 0 {
+			global.opMap[session.Operator.ID] = chatID
+		}
 	}
 	return session
 }

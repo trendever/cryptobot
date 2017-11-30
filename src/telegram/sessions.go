@@ -4,6 +4,7 @@ import (
 	"common/log"
 	"common/stopper"
 	"core/proto"
+	"errors"
 	"github.com/tucnak/telebot"
 )
 
@@ -33,11 +34,26 @@ func NewSession(chatID int64) *Session {
 	return s
 }
 
-func LoadSession(chatID int64) (*Session, error) {
-	op, err := OperatorByTd(chatID)
+func LoadSessionForOperator(operatorID uint64) (*Session, error) {
+	op, err := OperatorByID(operatorID)
+	if err != nil {
+		return nil, err
+	}
+	if op.ID == 0 {
+		return nil, errors.New("operator not found")
+	}
+	return makeSessionWithOperator(op), nil
+}
+
+func LoadSessionForChat(chatID int64) (*Session, error) {
+	op, err := OperatorByTg(chatID)
 	if err != nil {
 		return NewSession(chatID), err
 	}
+	return makeSessionWithOperator(op), nil
+}
+
+func makeSessionWithOperator(op proto.Operator) *Session {
 	ses := &Session{
 		Operator: op,
 		State:    State_Start,
@@ -45,11 +61,10 @@ func LoadSession(chatID int64) (*Session, error) {
 		events:   make(chan interface{}, 8),
 		stopper:  stopper.NewStopper(),
 	}
-	ses.Operator.TelegramChat = chatID
 	global.waitGroup.Add(1)
 	go ses.loop()
 	ses.StateFromOpStatus()
-	return ses, nil
+	return ses
 }
 
 func (s *Session) PushMessage(msg telebot.Message) {
@@ -61,7 +76,7 @@ func (s *Session) PushEvent(event interface{}) {
 }
 
 func (s *Session) Reload() error {
-	op, err := OperatorByTd(s.Operator.TelegramChat)
+	op, err := OperatorByTg(s.Operator.TelegramChat)
 	if err != nil {
 		log.Errorf("failed to reload session for chat %v: %v", s.Operator.TelegramChat, err)
 		return err

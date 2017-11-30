@@ -180,6 +180,7 @@ var statesInit = map[State]StateActions{
 			if !ok {
 				return
 			}
+			curOrder, ok := s.context.(proto.Order)
 			switch order.Status {
 			case proto.OrderStatus_New:
 				log.Error(SendMessage(
@@ -188,27 +189,40 @@ var statesInit = map[State]StateActions{
 					Keyboard(M("accept"), M("skip")),
 				))
 				s.context = order
+
 			case proto.OrderStatus_Accepted:
+				if curOrder.ID != order.ID {
+					return
+				}
 				log.Error(SendMessage(
 					s.Dest(),
 					fmt.Sprintf(M("order %v was taken by another operators"), order.ID),
 					Keyboard(M("cancel")),
 				))
 				s.context = nil
+
 			case proto.OrderStatus_Rejected:
+				if curOrder.ID != order.ID {
+					return
+				}
 				log.Error(SendMessage(
 					s.Dest(),
 					fmt.Sprintf(M("order %v was rejected on timeout"), order.ID),
 					Keyboard(M("cancel")),
 				))
 				s.context = nil
+
 			case proto.OrderStatus_Canceled:
+				if curOrder.ID != order.ID {
+					return
+				}
 				log.Error(SendMessage(
 					s.Dest(),
 					fmt.Sprintf(M("order %v was canceled by client"), order.ID),
 					Keyboard(M("cancel")),
 				))
 				s.context = nil
+
 			default:
 				log.Warn("got order %v with unxepected status %v in WaitForOrders", order.ID, order.Status)
 				if s.context == nil {
@@ -242,6 +256,16 @@ func serveOrderEvent(s *Session, event interface{}) {
 	if !ok {
 		return
 	}
+	curOrder, ok := s.context.(proto.Order)
+	if curOrder.ID != order.ID {
+		// @TODO May it happen when new offer comes right after work with another was finished?
+		log.Errorf(
+			"operator %v got event for order %v while serving %v",
+			s.Operator.ID, order.ID, curOrder.ID,
+		)
+		return
+	}
+
 	switch order.Status {
 	case proto.OrderStatus_Canceled:
 		log.Error(SendMessage(
@@ -250,6 +274,7 @@ func serveOrderEvent(s *Session, event interface{}) {
 			Keyboard(M("cancel")),
 		))
 		s.ChangeState(State_WaitForOrders)
+
 	case proto.OrderStatus_Timeout:
 		log.Error(SendMessage(
 			s.Dest(),
@@ -285,6 +310,8 @@ func serveOrderMessage(s *Session, msg *telebot.Message) {
 		s.ChangeState(State_Unavailable)
 		return
 	}
+	log.Debug("order: %+v", order)
+
 	if msg.Text == M("drop") {
 		_, err := DropOrder(proto.DropOrderRequest{
 			OperatorID: s.Operator.ID,

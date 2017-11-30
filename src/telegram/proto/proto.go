@@ -36,13 +36,3 @@ var SendOffer = rabbit.RPC{
 	Name:        "send_offer",
 	HandlerType: (func(SendOfferRequest) (bool, error))(nil),
 }
-
-type OrderEventMessage struct {
-	ChatID int64
-	Order  core.Order
-}
-
-var OrderEvent = rabbit.RPC{
-	Name:        "offer_event",
-	HandlerType: (func(OrderEventMessage) (bool, error))(nil),
-}

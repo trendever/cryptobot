@@ -41,6 +41,18 @@ type Operator struct {
 	CurrentOrder uint64 `gorm:"index"`
 }
 
+func (op Operator) Encode() proto.Operator {
+	p, s := op.Key.IsValid()
+	return proto.Operator{
+		ID:           op.ID,
+		Username:     op.Username,
+		TelegramChat: op.TelegramChat,
+		HasValidKey:  p && s,
+		Status:       op.Status,
+		CurrentOrder: op.CurrentOrder,
+	}
+}
+
 type LBTransaction struct {
 	ID        uint64
 	Direction TransactionDirection

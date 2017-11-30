@@ -12,6 +12,7 @@ import (
 
 func init() {
 	rabbit.ServeRPC(proto.CheckKey, CheckKey)
+	rabbit.ServeRPC(proto.OperatorByID, OperatorByID)
 	rabbit.ServeRPC(proto.OperatorByTg, OperatorByTg)
 	rabbit.ServeRPC(proto.SetOperatorStatus, SetOperatorStatus)
 	rabbit.ServeRPC(proto.SetOperatorKey, SetOperatorKey)
@@ -47,15 +48,10 @@ func CheckKey(key lbapi.Key) (proto.Operator, error) {
 		return proto.Operator{}, proto.DBError
 	}
 
-	s, p = op.Key.IsValid()
-	return proto.Operator{
-		ID:           op.ID,
-		Username:     acc.Username,
-		TelegramChat: op.TelegramChat,
-		Status:       op.Status,
-		HasValidKey:  s && p,
-		CurrentOrder: op.CurrentOrder,
-	}, nil
+	// Just for encoding, do not save yet
+	op.Username = acc.Username
+	op.Key = key
+	return op.Encode(), nil
 }
 
 func OperatorByTg(chatID int64) (proto.Operator, error) {
@@ -63,25 +59,31 @@ func OperatorByTg(chatID int64) (proto.Operator, error) {
 	scope := db.New().First(&op, "telegram_chat = ?", chatID)
 	switch {
 	case scope.RecordNotFound():
-		return proto.Operator{
-			Username: op.Username,
-		}, nil
+		log.Debug("operator with telegram chat %v not found", chatID)
+		return proto.Operator{}, nil
 
 	case scope.Error != nil:
 		log.Errorf("failed to load operator for chat %v: %v", chatID, scope.Error)
 		return proto.Operator{}, proto.DBError
 	}
 
-	s, p := op.Key.IsValid()
-	// It's fine to return empty value.
-	return proto.Operator{
-		ID:           op.ID,
-		Username:     op.Username,
-		TelegramChat: chatID,
-		Status:       op.Status,
-		HasValidKey:  s && p,
-		CurrentOrder: op.CurrentOrder,
-	}, nil
+	return op.Encode(), nil
+}
+
+func OperatorByID(operatorID uint64) (proto.Operator, error) {
+	var op Operator
+	scope := db.New().First(&op, "id = ?", operatorID)
+	switch {
+	case scope.RecordNotFound():
+		log.Debug("operator %v not found", operatorID)
+		return proto.Operator{}, nil
+
+	case scope.Error != nil:
+		log.Errorf("failed to load operator %v: %v", operatorID, scope.Error)
+		return proto.Operator{}, proto.DBError
+	}
+
+	return op.Encode(), nil
 }
 
 func SetOperatorStatus(req proto.SetOperatorStatusRequest) (bool, error) {

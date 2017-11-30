@@ -248,20 +248,13 @@ func OfferOrder(op Operator, order Order) error {
 }
 
 func RejectOrder(order Order) error {
-	order.Status = proto.OrderStatus_Rejected
 	tx := db.NewTransaction()
-	err := order.Save(tx)
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
 	var ops []Operator
-	err = tx.Find(&ops, "current_order = ?", order.ID).Error
+	err := tx.Find(&ops, "current_order = ?", order.ID).Error
 	if err != nil {
 		tx.Rollback()
 		return err
 	}
-	encoded := order.Encode()
 	for _, op := range ops {
 		err := tx.Model(&op).Updates(map[string]interface{}{
 			"status":        proto.OperatorStatus_Ready,
@@ -271,15 +264,13 @@ func RejectOrder(order Order) error {
 			tx.Rollback()
 			return err
 		}
-		go func() {
-			_, err := OrderEvent(tg.OrderEventMessage{
-				ChatID: op.TelegramChat,
-				Order:  encoded,
-			})
-			if err != nil {
-				log.Errorf("failed to perform cancel offer request: %v", err)
-			}
-		}()
+	}
+
+	order.Status = proto.OrderStatus_Rejected
+	err = order.Save(tx)
+	if err != nil {
+		tx.Rollback()
+		return err
 	}
 	return tx.Commit().Error
 }

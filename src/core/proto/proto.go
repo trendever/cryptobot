@@ -48,6 +48,11 @@ var OperatorByTg = rabbit.RPC{
 	HandlerType: (func(chatID int64) (Operator, error))(nil),
 }
 
+var OperatorByID = rabbit.RPC{
+	Name:        "operator_by_id",
+	HandlerType: (func(operatorID uint64) (Operator, error))(nil),
+}
+
 type SetOperatorStatusRequest struct {
 	ChatID int64
 	Status OperatorStatus
@@ -143,7 +148,7 @@ var CreateOrder = rabbit.RPC{
 
 var CancelOrder = rabbit.RPC{
 	Name:        "cancel_order",
-	HandlerType: (func(orderID uint64) (Order, error))(nil),
+	HandlerType: (func(orderID uint64) (bool, error))(nil),
 	Timeout:     time.Second * 5,
 }
 
