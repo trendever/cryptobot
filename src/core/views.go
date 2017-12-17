@@ -63,7 +63,9 @@ func OperatorByTg(chatID int64) (proto.Operator, error) {
 	switch {
 	case scope.RecordNotFound():
 		log.Debug("operator with telegram chat %v not found", chatID)
-		return proto.Operator{}, nil
+		return proto.Operator{
+			TelegramChat: chatID,
+		}, nil
 
 	case scope.Error != nil:
 		log.Errorf("failed to load operator for chat %v: %v", chatID, scope.Error)
@@ -79,7 +81,7 @@ func OperatorByID(operatopID uint64) (proto.Operator, error) {
 	switch {
 	case scope.RecordNotFound():
 		log.Debug("operator %v not found", operatopID)
-		return proto.Operator{}, nil
+		return proto.Operator{}, errors.New("operator not found")
 
 	case scope.Error != nil:
 		log.Errorf("failed to load operator %v: %v", operatopID, scope.Error)
