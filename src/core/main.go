@@ -20,6 +20,11 @@ var conf struct {
 	Debug       bool
 	DumpQueries bool
 
+	// List of currencies which rates are fetched automatically since service start.
+	// Others will be added on demand(when first order occurs)
+	PrefetchRates    []string
+	RatesRefreshTick string
+
 	Messages map[string]string
 
 	LBCheckTick string
@@ -86,6 +91,8 @@ func (srv service) Start() {
 	if err != nil {
 		log.Fatalf("failed to load currency list: %v", err)
 	}
+
+	go RatesRefresh(conf.PrefetchRates)
 
 	rabbit.Start(&conf.Rabbit)
 

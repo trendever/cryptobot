@@ -8,7 +8,12 @@ dumpQueries: true
 proxy: ""
 sentryDNS: ""
 
-lbCheckTick: "30s"
+lbCheckTick: 30s
+
+ratesRefreshTick: 10m
+prefetchRates:
+    - RUB
+    - USD
 
 db:
   debug:    true

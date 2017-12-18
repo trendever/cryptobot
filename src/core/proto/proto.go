@@ -142,7 +142,7 @@ var OrderEventRoute = rabbit.Route{
 var CreateOrder = rabbit.RPC{
 	Name:        "create_order",
 	HandlerType: (func(Order) (Order, error))(nil),
-	Timeout:     time.Second * 5,
+	Timeout:     time.Second * 20,
 }
 
 var CancelOrder = rabbit.RPC{
