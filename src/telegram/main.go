@@ -126,6 +126,8 @@ func Listen() {
 			}
 			if session != nil {
 				session.PushEvent(event.Data)
+			} else {
+				log.Warn("could to get session for operator %v/chat %v", event.OperatorID, event.ChatID)
 			}
 		}
 	}
