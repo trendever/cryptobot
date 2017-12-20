@@ -389,7 +389,32 @@ func CancelOrder(orderID uint64) (bool, error) {
 		return false, errors.New("unexpected status")
 	}
 	order.Status = proto.OrderStatus_Canceled
-	err = order.Save(db.New())
+
+	tx := db.NewTransaction()
+
+	var op Operator
+	err = db.New().First(&op, "id = ?", order.OperatorID).Error
+	if err != nil {
+		tx.Rollback()
+		log.Errorf("failed to load operator %v: %v", order.OperatorID, err)
+		return false, errors.New(proto.DBError)
+	}
+
+	err = tx.Model(&op).Updates(map[string]interface{}{
+		"status":        proto.OperatorStatus_Inactive,
+		"current_order": 0,
+	}).Error
+	if err != nil {
+		tx.Rollback()
+		return false, errors.New(proto.DBError)
+	}
+
+	err = order.Save(tx)
+	if err != nil {
+		tx.Rollback()
+		return false, errors.New(proto.DBError)
+	}
+	err = tx.Commit().Error
 	if err != nil {
 		return false, errors.New(proto.DBError)
 	}
@@ -447,6 +472,11 @@ func ConfirmPayment(orderID uint64) (bool, error) {
 	// @TODO Transfer coins to client from bs buffer
 	order.Status = proto.OrderStatus_Finished
 	err = order.Save(tx)
+	if err != nil {
+		tx.Rollback()
+		return false, errors.New(proto.DBError)
+	}
+	err = tx.Commit().Error
 	if err != nil {
 		return false, errors.New(proto.DBError)
 	}
