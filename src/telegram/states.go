@@ -313,7 +313,7 @@ func serveOrderEvent(s *Session, event interface{}) {
 		))
 		s.ChangeState(State_WaitForOrders)
 
-	case proto.OrderStatus_Linked:
+	case proto.OrderStatus_Linked, proto.OrderStatus_Payment:
 		// nothing need to be done here
 
 	case proto.OrderStatus_Confirmation:
