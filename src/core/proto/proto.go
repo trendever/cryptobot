@@ -14,6 +14,8 @@ var (
 	ContactNotFoundError = "contact not found"
 )
 
+const DepositTransactionPrefix = "DEPO_"
+
 const (
 	// Account does not have valid keypair and does not perform any utility actions in the moment
 	OperatorStatus_None OperatorStatus = 0
@@ -35,6 +37,7 @@ type Operator struct {
 	HasValidKey  bool
 	Status       OperatorStatus
 	CurrentOrder uint64
+	Deposit      decimal.Decimal
 }
 
 var CheckKey = rabbit.RPC{
@@ -70,6 +73,11 @@ type SetOperatorKeyRequest struct {
 var SetOperatorKey = rabbit.RPC{
 	Name:        "set_operator_key",
 	HandlerType: (func(SetOperatorKeyRequest) (Operator, error))(nil),
+}
+
+var GetDepositRefillAddress = rabbit.RPC{
+	Name:        "get_deposi_refill_address",
+	HandlerType: (func(operatorID uint64) (string, error))(nil),
 }
 
 type OrderStatus int

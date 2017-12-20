@@ -39,7 +39,11 @@ var conf struct {
 	SentryDSN string
 }
 
-var CurrencyList []string
+var (
+	CurrencyList []string
+	// bitcoin(lb one) address for refill if deposits
+	ReceivingAddress string
+)
 
 type service struct{}
 
@@ -82,10 +86,11 @@ func (srv service) Start() {
 	}
 	lbapi.DumpQueries = conf.DumpQueries
 
-	_, err = conf.LBKey.Wallet()
+	wallet, err := conf.LBKey.Wallet()
 	if err != nil {
 		log.Fatalf("failed to init-check buffer wallet: %v", err)
 	}
+	ReceivingAddress = wallet.ReceivingAddress
 	// I think load it just on start will be enough
 	CurrencyList, err = conf.LBKey.CurrencyList()
 	if err != nil {

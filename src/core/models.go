@@ -50,6 +50,7 @@ func (op Operator) Encode() proto.Operator {
 		HasValidKey:  p && s,
 		Status:       op.Status,
 		CurrentOrder: op.CurrentOrder,
+		Deposit:      op.Deposit,
 	}
 }
 

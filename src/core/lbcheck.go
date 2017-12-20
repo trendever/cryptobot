@@ -12,8 +12,6 @@ import (
 	"time"
 )
 
-const DepositTransactionPrefix = "DEPO."
-
 func LBTransactionsLoop() {
 	for range time.Tick(conf.lbCheckTick) {
 		wallet, err := conf.LBKey.Wallet()
@@ -50,11 +48,11 @@ func ProcessIncomingTx(event lbapi.Transaction) error {
 		return err
 	}
 
-	if !strings.HasPrefix(event.Description, DepositTransactionPrefix) {
+	if !strings.HasPrefix(event.Description, proto.DepositTransactionPrefix) {
 		return tx.Commit().Error
 	}
 
-	operatorStr := strings.TrimPrefix(event.Description, DepositTransactionPrefix)
+	operatorStr := strings.TrimPrefix(event.Description, proto.DepositTransactionPrefix)
 	operatorID, err := strconv.ParseUint(operatorStr, 36, 64)
 	if err != nil {
 		log.Warn("invalid account id '%v' it transaction %v", operatorStr, data.ID)

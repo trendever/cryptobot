@@ -70,6 +70,10 @@ var statesInit = map[State]StateActions{
 			case M("start serve"):
 				s.ChangeState(State_WaitForOrders)
 				return
+
+			case M("show deposit"):
+				showDeposit(s)
+				return
 			}
 			log.Error(SendMessage(s.Dest(), M("start"), startKeyboard(s)))
 		},
@@ -249,6 +253,26 @@ var statesInit = map[State]StateActions{
 	},
 }
 
+func showDeposit(s *Session) {
+	addr, err := GetDepositRefillAddress(s.Operator.ID)
+	if err != nil {
+		s.ChangeState(State_Unavailable)
+	}
+	op, err := OperatorByID(s.Operator.ID)
+	if err != nil {
+		s.ChangeState(State_Unavailable)
+	}
+	s.Operator = op
+	log.Error(SendMessage(
+		s.Dest(),
+		fmt.Sprintf(
+			"current deposit: %v\n"+
+				"for replenishment send localbitcoin trasfer to address %v with comment '%v%v'",
+			op.Deposit, addr, proto.DepositTransactionPrefix, op.ID),
+		startKeyboard(s)),
+	)
+}
+
 func serveOrderEnter(s *Session) {
 	order, err := GetOrder(s.Operator.CurrentOrder)
 	if err != nil {
@@ -297,6 +321,7 @@ func serveOrderEvent(s *Session, event interface{}) {
 	switch order.Status {
 	case proto.OrderStatus_Accepted:
 		// Does not matter, that is result of our accept actuality
+
 	case proto.OrderStatus_Canceled:
 		log.Error(SendMessage(
 			s.Dest(),
@@ -438,6 +463,7 @@ func startKeyboard(s *Session) *telebot.SendOptions {
 		keys = append(
 			keys,
 			M("start serve"),
+			M("show deposit"),
 		)
 	}
 	return Keyboard(keys...)

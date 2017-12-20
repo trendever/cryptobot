@@ -17,6 +17,7 @@ func init() {
 	rabbit.ServeRPC(proto.OperatorByTg, OperatorByTg)
 	rabbit.ServeRPC(proto.SetOperatorStatus, SetOperatorStatus)
 	rabbit.ServeRPC(proto.SetOperatorKey, SetOperatorKey)
+	rabbit.ServeRPC(proto.GetDepositRefillAddress, GetDepositRefillAddress)
 	rabbit.ServeRPC(proto.CreateOrder, CreateOrder)
 	rabbit.ServeRPC(proto.GetOrder, GetOrder)
 	rabbit.ServeRPC(proto.AcceptOffer, AcceptOffer)
@@ -27,6 +28,10 @@ func init() {
 	rabbit.ServeRPC(proto.CancelOrder, CancelOrder)
 	rabbit.ServeRPC(proto.MarkPayed, MarkPayed)
 	rabbit.ServeRPC(proto.ConfirmPayment, ConfirmPayment)
+}
+
+func GetDepositRefillAddress(operatorID uint64) (string, error) {
+	return ReceivingAddress, nil
 }
 
 func CheckKey(key lbapi.Key) (proto.Operator, error) {
