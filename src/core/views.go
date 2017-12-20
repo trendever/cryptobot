@@ -75,16 +75,16 @@ func OperatorByTg(chatID int64) (proto.Operator, error) {
 	return op.Encode(), nil
 }
 
-func OperatorByID(operatopID uint64) (proto.Operator, error) {
+func OperatorByID(operatorID uint64) (proto.Operator, error) {
 	var op Operator
-	scope := db.New().First(&op, "id = ?", operatopID)
+	scope := db.New().First(&op, "id = ?", operatorID)
 	switch {
 	case scope.RecordNotFound():
-		log.Debug("operator %v not found", operatopID)
+		log.Debug("operator %v not found", operatorID)
 		return proto.Operator{}, errors.New("operator not found")
 
 	case scope.Error != nil:
-		log.Errorf("failed to load operator %v: %v", operatopID, scope.Error)
+		log.Errorf("failed to load operator %v: %v", operatorID, scope.Error)
 		return proto.Operator{}, errors.New(proto.DBError)
 	}
 
@@ -332,7 +332,7 @@ func LinkLBContract(req proto.LinkLBContractRequest) (proto.Order, error) {
 	found := false
 	var contact lbapi.Contact
 	for _, contact = range contacts {
-		if contact.Data.Currency == order.Currency && contact.Data.Amount == order.FiatAmount {
+		if contact.Data.Currency == order.Currency && contact.Data.Amount.Equal(order.FiatAmount) {
 			found = true
 			break
 		}

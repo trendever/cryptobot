@@ -468,7 +468,7 @@ func changeKey(s *Session, msg *telebot.Message) {
 		if err != nil {
 			rpcErr := err.(rabbit.RPCError)
 			if rpcErr.Description == "HMAC authentication key and signature was given, but they are invalid." {
-				log.Error(SendMessage(s.Dest(), fmt.Sprintf(M("invalid key"), err), nil))
+				log.Error(SendMessage(s.Dest(), M("invalid key"), nil))
 				s.ChangeState(State_Start)
 			} else {
 				log.Errorf("got unexpected error from CheckKey rpc: %v", err)
