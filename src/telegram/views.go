@@ -42,6 +42,7 @@ func SendOfferHandler(req proto.SendOfferRequest) (bool, error) {
 }
 
 func OrderEventHandler(order core.Order) bool {
+	log.Debug("order event: %+v", order)
 	global.events <- event{
 		OperatorID: order.OperatorID,
 		Data:       order,
