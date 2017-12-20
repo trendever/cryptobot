@@ -34,7 +34,7 @@ var SosoRoutes = []soso.Route{
 
 func GetOrderHandler(c *soso.Context, arg *struct {
 	OrderID uint64 `json:"order_id"`
-	Addess  string `json:"address"`
+	Address string `json:"address"`
 }) {
 	if arg.OrderID == 0 {
 		c.ErrorResponse(http.StatusBadRequest, soso.LevelError, errors.New("bad request"))
@@ -53,7 +53,7 @@ func GetOrderHandler(c *soso.Context, arg *struct {
 		return
 	}
 
-	if order.Destination != arg.Addess {
+	if order.Destination != arg.Address {
 		c.ErrorResponse(http.StatusForbidden, soso.LevelError, errors.New("forbidden"))
 		return
 	}
