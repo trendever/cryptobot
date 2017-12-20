@@ -25,6 +25,11 @@ var SosoRoutes = []soso.Route{
 		Method:  "cancel",
 		Handler: CancelOrderHandler,
 	},
+	{
+		Domain:  "order",
+		Method:  "mark_payed",
+		Handler: MarkPayedHandler,
+	},
 }
 
 func GetOrderHandler(c *soso.Context, arg *struct {

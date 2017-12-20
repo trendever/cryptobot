@@ -313,6 +313,9 @@ func serveOrderEvent(s *Session, event interface{}) {
 		))
 		s.ChangeState(State_WaitForOrders)
 
+	case proto.OrderStatus_Linked:
+		// nothing need to be done here
+
 	case proto.OrderStatus_Confirmation:
 		log.Error(SendMessage(s.Dest(), M("client marked order as payed"), Keyboard(M("confirm"))))
 
