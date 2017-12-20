@@ -340,9 +340,11 @@ func serveOrderEvent(s *Session, event interface{}) {
 
 	case proto.OrderStatus_Linked, proto.OrderStatus_Payment:
 		// nothing need to be done here
+		s.context = order
 
 	case proto.OrderStatus_Confirmation:
 		log.Error(SendMessage(s.Dest(), M("client marked order as payed"), Keyboard(M("confirm"))))
+		s.context = order
 
 	case proto.OrderStatus_Finished:
 		amount := order.LBAmount.Sub(order.LBFee).Sub(order.OperatorFee)
