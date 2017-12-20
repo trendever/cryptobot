@@ -198,6 +198,7 @@ func CreateOrder(req proto.Order) (proto.Order, error) {
 	// @TODO Lock something on bitshares buffer? May be on later step
 	order := Order{
 		ClientName:    req.ClientName,
+		Destination:   req.Destination,
 		PaymentMethod: req.PaymentMethod,
 		Currency:      req.Currency,
 		FiatAmount:    req.FiatAmount,
