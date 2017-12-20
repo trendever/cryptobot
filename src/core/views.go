@@ -435,7 +435,11 @@ func ConfirmPayment(orderID uint64) (bool, error) {
 	tx := db.NewTransaction()
 	// Amount to write-off from op deposit: contact_sum - lb_fee - op_fee
 	amount := order.LBAmount.Sub(order.LBFee).Sub(order.OperatorFee)
-	err = tx.Model(&op).Update("deposit", gorm.Expr("deposit - ?", amount)).Error
+	err = tx.Model(&op).Updates(map[string]interface{}{
+		"status":        proto.OperatorStatus_Inactive,
+		"current_order": 0,
+		"deposit":       gorm.Expr("deposit - ?", amount),
+	}).Error
 	if err != nil {
 		tx.Rollback()
 		return false, errors.New(proto.DBError)
