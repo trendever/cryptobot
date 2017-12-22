@@ -34,6 +34,8 @@ services:
     networks:
       - crypto
     command: ./bin/api start
+    ports:
+      - 127.0.0.1:8093:8093
 
   db:
     image: "postgres:9-alpine"
