@@ -68,7 +68,7 @@ func IDForAddress(address string) uint64 {
 }
 
 func TokenMiddleware(req *soso.Request, ctx *soso.Context, session soso.Session) error {
-	if address, ok := req.TransMap["address"].(string); ok {
+	if address, ok := req.TransMap["token"].(string); ok {
 		ctx.Token = &soso.Token{UID: IDForAddress(address), Exp: time.Now().Add(time.Hour).Unix()}
 	}
 	return nil
