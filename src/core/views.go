@@ -397,21 +397,23 @@ func CancelOrder(orderID uint64) (bool, error) {
 
 	tx := db.NewTransaction()
 
-	var op Operator
-	err = db.New().First(&op, "id = ?", order.OperatorID).Error
-	if err != nil {
-		tx.Rollback()
-		log.Errorf("failed to load operator %v: %v", order.OperatorID, err)
-		return false, errors.New(proto.DBError)
-	}
+	if order.OperatorID != 0 {
+		var op Operator
+		err = db.New().First(&op, "id = ?", order.OperatorID).Error
+		if err != nil {
+			tx.Rollback()
+			log.Errorf("failed to load operator %v: %v", order.OperatorID, err)
+			return false, errors.New(proto.DBError)
+		}
 
-	err = tx.Model(&op).Updates(map[string]interface{}{
-		"status":        proto.OperatorStatus_Inactive,
-		"current_order": 0,
-	}).Error
-	if err != nil {
-		tx.Rollback()
-		return false, errors.New(proto.DBError)
+		err = tx.Model(&op).Updates(map[string]interface{}{
+			"status":        proto.OperatorStatus_Inactive,
+			"current_order": 0,
+		}).Error
+		if err != nil {
+			tx.Rollback()
+			return false, errors.New(proto.DBError)
+		}
 	}
 
 	err = order.Save(tx)
