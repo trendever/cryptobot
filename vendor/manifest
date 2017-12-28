@@ -14,6 +14,12 @@
 			"branch": "master"
 		},
 		{
+			"importpath": "github.com/asaskevich/govalidator",
+			"repository": "https://github.com/asaskevich/govalidator",
+			"revision": "852d82c746b23d9b357b210ea470d99f4e023b72",
+			"branch": "master"
+		},
+		{
 			"importpath": "github.com/certifi/gocertifi",
 			"repository": "https://github.com/certifi/gocertifi",
 			"revision": "3fd9e1adb12b72d2f3f82191d49be9b93c69f67c",
@@ -75,6 +81,12 @@
 			"branch": "master"
 		},
 		{
+			"importpath": "github.com/disintegration/imaging",
+			"repository": "https://github.com/disintegration/imaging",
+			"revision": "1884593a19ddc6f2ea050403430d02c1d0fc1283",
+			"branch": "master"
+		},
+		{
 			"importpath": "github.com/fatih/color",
 			"repository": "https://github.com/fatih/color",
 			"revision": "5df930a27be2502f99b292b7cc09ebad4d0891f4",
@@ -99,9 +111,33 @@
 			"branch": "master"
 		},
 		{
+			"importpath": "github.com/gorilla/context",
+			"repository": "https://github.com/gorilla/context",
+			"revision": "08b5f424b9271eedf6f9f0ce86cb9396ed337a42",
+			"branch": "master"
+		},
+		{
+			"importpath": "github.com/gorilla/securecookie",
+			"repository": "https://github.com/gorilla/securecookie",
+			"revision": "e59506cc896acb7f7bf732d4fdf5e25f7ccd8983",
+			"branch": "master"
+		},
+		{
+			"importpath": "github.com/gorilla/sessions",
+			"repository": "https://github.com/gorilla/sessions",
+			"revision": "a3acf13e802c358d65f249324d14ed24aac11370",
+			"branch": "master"
+		},
+		{
 			"importpath": "github.com/gorilla/websocket",
 			"repository": "https://github.com/gorilla/websocket",
 			"revision": "4201258b820c74ac8e6922fc9e6b52f71fe46f8d",
+			"branch": "master"
+		},
+		{
+			"importpath": "github.com/gosimple/slug",
+			"repository": "https://github.com/gosimple/slug",
+			"revision": "e9f42fa127660e552d0ad2b589868d403a9be7c6",
 			"branch": "master"
 		},
 		{
@@ -151,6 +187,12 @@
 			"branch": "master"
 		},
 		{
+			"importpath": "github.com/jinzhu/now",
+			"repository": "https://github.com/jinzhu/now",
+			"revision": "d939ba741945c047cac69c329c5fb0d6b4a06520",
+			"branch": "master"
+		},
+		{
 			"importpath": "github.com/lib/pq",
 			"repository": "https://github.com/lib/pq",
 			"revision": "b77235e3890a962fe8a6f8c4c7198679ca7814e7",
@@ -181,6 +223,12 @@
 			"branch": "master"
 		},
 		{
+			"importpath": "github.com/microcosm-cc/bluemonday",
+			"repository": "https://github.com/microcosm-cc/bluemonday",
+			"revision": "542fd4642604d0d0c26112396ce5b1a9d01eee0b",
+			"branch": "master"
+		},
+		{
 			"importpath": "github.com/mitchellh/go-homedir",
 			"repository": "https://github.com/mitchellh/go-homedir",
 			"revision": "b8bc1bf767474819792c23f32d8286a45736f1c6",
@@ -208,6 +256,78 @@
 			"importpath": "github.com/pkg/errors",
 			"repository": "https://github.com/pkg/errors",
 			"revision": "2b3a18b5f0fb6b4f9190549597d3f962c02bc5eb",
+			"branch": "master"
+		},
+		{
+			"importpath": "github.com/qor/admin",
+			"repository": "https://github.com/qor/admin",
+			"revision": "ebaca67d77adce53b682364797b69504d0360a6e",
+			"branch": "master"
+		},
+		{
+			"importpath": "github.com/qor/assetfs",
+			"repository": "https://github.com/qor/assetfs",
+			"revision": "ff57fdc13a148d39c3e930cb27c7eaf82e376891",
+			"branch": "master"
+		},
+		{
+			"importpath": "github.com/qor/media",
+			"repository": "https://github.com/qor/media",
+			"revision": "32fd71d5c63bc8b1307af9ccc8647f39f8c91d67",
+			"branch": "master"
+		},
+		{
+			"importpath": "github.com/qor/middlewares",
+			"repository": "https://github.com/qor/middlewares",
+			"revision": "781378b69454a545d08058d8154aca40d079e7ab",
+			"branch": "master"
+		},
+		{
+			"importpath": "github.com/qor/oss",
+			"repository": "https://github.com/qor/oss",
+			"revision": "ed4f6984a3e1375621bf01a4ba34cdb76df4702b",
+			"branch": "master"
+		},
+		{
+			"importpath": "github.com/qor/qor",
+			"repository": "https://github.com/qor/qor",
+			"revision": "1c17696527773fa844a809b0ff06f79559f4d336",
+			"branch": "master"
+		},
+		{
+			"importpath": "github.com/qor/responder",
+			"repository": "https://github.com/qor/responder",
+			"revision": "b6def473574f621fee316696ad120d4fbf470826",
+			"branch": "master"
+		},
+		{
+			"importpath": "github.com/qor/roles",
+			"repository": "https://github.com/qor/roles",
+			"revision": "d6375609fe3e5da46ad3a574fae244fb633e79c1",
+			"branch": "master"
+		},
+		{
+			"importpath": "github.com/qor/serializable_meta",
+			"repository": "https://github.com/qor/serializable_meta",
+			"revision": "b432456ad58b075008d8b5633e16bd796926b5f4",
+			"branch": "master"
+		},
+		{
+			"importpath": "github.com/qor/session",
+			"repository": "https://github.com/qor/session",
+			"revision": "8206b0adab706a6ef3ee6fabba2584d34429a26a",
+			"branch": "master"
+		},
+		{
+			"importpath": "github.com/qor/validations",
+			"repository": "https://github.com/qor/validations",
+			"revision": "404d5a9c34adc6f6a3a7b6c82faa15337e1fdd00",
+			"branch": "master"
+		},
+		{
+			"importpath": "github.com/rainycape/unidecode",
+			"repository": "https://github.com/rainycape/unidecode",
+			"revision": "cb7f23ec59bec0d61b19c56cd88cee3d0cc1870c",
 			"branch": "master"
 		},
 		{
@@ -265,6 +385,12 @@
 			"branch": "master"
 		},
 		{
+			"importpath": "github.com/theplant/cldr",
+			"repository": "https://github.com/theplant/cldr",
+			"revision": "b97a4c2a76cf8ba21d1cb8ed2f4c8ee103371e2d",
+			"branch": "master"
+		},
+		{
 			"importpath": "github.com/tucnak/telebot",
 			"repository": "https://github.com/tucnak/telebot",
 			"revision": "00cebf376d79ee4363a11cd66fbbdf565452e0ab",
@@ -299,6 +425,20 @@
 			"path": "/encoding/secconf"
 		},
 		{
+			"importpath": "go4.org/reflectutil",
+			"repository": "https://github.com/camlistore/go4",
+			"revision": "034d17a462f7b2dcd1a4a73553ec5357ff6e6c6e",
+			"branch": "master",
+			"path": "/reflectutil"
+		},
+		{
+			"importpath": "go4.org/sort",
+			"repository": "https://github.com/camlistore/go4",
+			"revision": "034d17a462f7b2dcd1a4a73553ec5357ff6e6c6e",
+			"branch": "master",
+			"path": "/sort"
+		},
+		{
 			"importpath": "golang.org/x/crypto/cast5",
 			"repository": "https://go.googlesource.com/crypto",
 			"revision": "9419663f5a44be8b34ca85f08abc5fe1be11f8a3",
@@ -320,11 +460,32 @@
 			"path": "/openpgp"
 		},
 		{
+			"importpath": "golang.org/x/image/bmp",
+			"repository": "https://go.googlesource.com/image",
+			"revision": "12117c17ca67ffa1ce22e9409f3b0b0a93ac08c7",
+			"branch": "master",
+			"path": "/bmp"
+		},
+		{
+			"importpath": "golang.org/x/image/tiff",
+			"repository": "https://go.googlesource.com/image",
+			"revision": "12117c17ca67ffa1ce22e9409f3b0b0a93ac08c7",
+			"branch": "master",
+			"path": "/tiff"
+		},
+		{
 			"importpath": "golang.org/x/net/context",
 			"repository": "https://go.googlesource.com/net",
 			"revision": "0a9397675ba34b2845f758fe3cd68828369c6517",
 			"branch": "master",
 			"path": "/context"
+		},
+		{
+			"importpath": "golang.org/x/net/html",
+			"repository": "https://go.googlesource.com/net",
+			"revision": "d866cfc389cec985d6fda2859936a575a55a3ab6",
+			"branch": "master",
+			"path": "/html"
 		},
 		{
 			"importpath": "golang.org/x/net/proxy",
