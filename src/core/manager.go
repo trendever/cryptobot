@@ -53,6 +53,7 @@ func (man *orderManager) loop() {
 			for i, order := range man.waiters {
 				if now.Sub(order.CreatedAt) < AcceptTimeout {
 					man.waiters = man.waiters[i:]
+					break
 				}
 				err := RejectOrder(order)
 				if err != nil {
