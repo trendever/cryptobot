@@ -477,7 +477,7 @@ func ConfirmPayment(orderID uint64) (bool, error) {
 		return false, errors.New(proto.DBError)
 	}
 	// @TODO Transfer coins to client from bs buffer
-	order.Status = proto.OrderStatus_Finished
+	order.Status = proto.OrderStatus_Transfer
 	err = order.Save(tx)
 	if err != nil {
 		tx.Rollback()
