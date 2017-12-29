@@ -21,15 +21,19 @@ func init() {
 		rabbit.Subscription{
 			Name:           "telegram_notify",
 			Routes:         []rabbit.Route{proto.SendNotifyRoute},
-			AutoAck:        true,
-			Prefetch:       10,
+			AutoAck:        false,
+			Prefetch:       5,
 			DecodedHandler: SendNotifyHandler,
 		},
 	)
 }
 
 func SendNotifyHandler(notify proto.SendNotifyMessage) bool {
-	log.Error(SendMessage(Dest(notify.ChatID), notify.Text, nil))
+	err := SendMessage(chatDestination(notify.Destination), notify.Text, nil)
+	if err != nil {
+		log.Errorf("failed to send notify to %v: %v", notify.Destination, err)
+		return !notify.Reliable
+	}
 	return true
 }
 

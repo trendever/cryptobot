@@ -38,6 +38,8 @@ var conf struct {
 	DB     db.Settings
 	Rabbit rabbit.Config
 
+	TelegramChanel string
+
 	SentryDSN string
 }
 

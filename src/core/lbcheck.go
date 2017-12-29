@@ -86,9 +86,9 @@ func ProcessIncomingTx(event lbapi.Transaction) error {
 	}
 
 	go func() {
-		err := SendTelegramNotify(op.TelegramChat, fmt.Sprintf(
+		err := SendTelegramNotify(strconv.FormatInt(op.TelegramChat, 10), fmt.Sprintf(
 			M("balance notify %v"), event.Amount,
-		))
+		), false)
 		if err != nil {
 			log.Errorf("failed to send balance notify: %v", err)
 		}

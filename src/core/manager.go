@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/pkg/errors"
 	"github.com/shopspring/decimal"
+	"strconv"
 	tg "telegram/proto"
 	"time"
 )
@@ -282,9 +283,9 @@ func RejectOrder(order Order) error {
 }
 
 func NotifyLackOfDeposit(op Operator, required decimal.Decimal) {
-	err := SendTelegramNotify(op.TelegramChat, fmt.Sprintf(
+	err := SendTelegramNotify(strconv.FormatInt(op.TelegramChat, 10), fmt.Sprintf(
 		M("order for an BTC amount %v was skipped due lack of your deposit(have %v)"), required, op.Deposit,
-	))
+	), false)
 	if err != nil {
 		log.Errorf("failed to send lack of deposit notify: %v", err)
 	}

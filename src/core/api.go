@@ -20,9 +20,10 @@ func init() {
 	)
 }
 
-func SendTelegramNotify(chatID int64, text string) error {
+func SendTelegramNotify(dest string, text string, reliable bool) error {
 	return rabbit.Publish("telegram_notify", "", proto.SendNotifyMessage{
-		ChatID: chatID,
-		Text:   text,
+		Destination: dest,
+		Text:        text,
+		Reliable:    reliable,
 	})
 }

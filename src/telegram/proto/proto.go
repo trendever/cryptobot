@@ -6,8 +6,10 @@ import (
 )
 
 type SendNotifyMessage struct {
-	ChatID int64
-	Text   string
+	Destination string
+	Text        string
+	// If true message will be resend later in case of any errors
+	Reliable bool
 }
 
 var SendNotifyRoute = rabbit.Route{

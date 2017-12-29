@@ -6,6 +6,7 @@ import (
 	"common/rabbit"
 	"core/proto"
 	"errors"
+	"fmt"
 	"github.com/jinzhu/gorm"
 	"github.com/shopspring/decimal"
 	"lbapi"
@@ -482,6 +483,14 @@ func ConfirmPayment(orderID uint64) (bool, error) {
 	if err != nil {
 		tx.Rollback()
 		return false, errors.New(proto.DBError)
+	}
+	err = SendTelegramNotify(conf.TelegramChanel, fmt.Sprintf(
+		"order %v reached transfer status\ndestination: %v\noutlet amount: %v",
+		order.ID, order.Destination, order.OutletAmount(),
+	), true)
+	if err != nil {
+		tx.Rollback()
+		return false, errors.New("notify failed")
 	}
 	err = tx.Commit().Error
 	if err != nil {

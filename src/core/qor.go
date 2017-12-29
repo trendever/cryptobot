@@ -33,7 +33,9 @@ func QorInit() {
 	}
 
 	adm.MountTo("/admin", http.DefaultServeMux)
-	log.Error(http.ListenAndServe(conf.QorAddress, http.DefaultServeMux))
+	go func() {
+		log.Fatal(http.ListenAndServe(conf.QorAddress, http.DefaultServeMux))
+	}()
 }
 
 type resource struct {

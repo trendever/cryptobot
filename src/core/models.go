@@ -97,6 +97,10 @@ func (order *Order) Save(db *gorm.DB) error {
 	return nil
 }
 
+func (order Order) OutletAmount() decimal.Decimal {
+	return order.LBAmount.Sub(order.LBFee).Sub(order.OperatorFee).Sub(order.BotFee)
+}
+
 func (order Order) Encode() proto.Order {
 	return proto.Order{
 		ID:                order.ID,
