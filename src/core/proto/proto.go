@@ -108,6 +108,25 @@ const (
 	OrderStatus_Finished OrderStatus = 12
 )
 
+var OrderStatusStrings = map[OrderStatus]string{
+	OrderStatus_New:          "new",
+	OrderStatus_Unrealizable: "unrealizable",
+	OrderStatus_Rejected:     "rejected",
+	OrderStatus_Accepted:     "accepted",
+	OrderStatus_Dropped:      "dropped",
+	OrderStatus_Linked:       "linked",
+	OrderStatus_Payment:      "payment",
+	OrderStatus_Canceled:     "canceled",
+	OrderStatus_Timeout:      "timeout",
+	OrderStatus_Confirmation: "confirmation",
+	OrderStatus_Transfer:     "transfer",
+	OrderStatus_Finished:     "finished",
+}
+
+func (s OrderStatus) String() string {
+	return OrderStatusStrings[s]
+}
+
 type Order struct {
 	ID         uint64
 	ClientName string
