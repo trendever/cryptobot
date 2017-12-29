@@ -346,7 +346,7 @@ func serveOrderEvent(s *Session, event interface{}) {
 		log.Error(SendMessage(s.Dest(), M("client marked order as payed"), Keyboard(M("confirm"))))
 		s.context = order
 
-	case proto.OrderStatus_Finished:
+	case proto.OrderStatus_Transfer, proto.OrderStatus_Finished:
 		amount := order.LBAmount.Sub(order.LBFee).Sub(order.OperatorFee)
 		log.Error(SendMessage(
 			s.Dest(),
