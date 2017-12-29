@@ -1,0 +1,14 @@
+.mdl-data-table td {
+  height: auto !important;
+  max-height: 200px !important;
+}
+
+.qor-table__content, .qor-table__content {
+  max-height: 200px !important;
+}
+
+.qor-table img {
+  height: auto !important;
+  max-height: 180px !important;
+  padding-bottom: 8px;
+}

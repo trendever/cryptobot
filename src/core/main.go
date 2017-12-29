@@ -20,6 +20,8 @@ var conf struct {
 	Debug       bool
 	DumpQueries bool
 
+	QorAddress string
+
 	// List of currencies which rates are fetched automatically since service start.
 	// Others will be added on demand(when first order occurs)
 	PrefetchRates    []string
@@ -90,12 +92,15 @@ func (srv service) Start() {
 	if err != nil {
 		log.Fatalf("failed to init-check buffer wallet: %v", err)
 	}
+
 	ReceivingAddress = wallet.ReceivingAddress
 	// I think load it just on start will be enough
 	CurrencyList, err = conf.LBKey.CurrencyList()
 	if err != nil {
 		log.Fatalf("failed to load currency list: %v", err)
 	}
+
+	QorInit()
 
 	go RatesRefresh(conf.PrefetchRates)
 

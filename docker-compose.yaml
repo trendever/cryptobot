@@ -12,6 +12,11 @@ services:
       - db
     networks:
       - crypto
+    ports:
+      - 127.0.0.1:8777:8777
+    environment:
+      WEB_ROOT: '/services'
+      GOPATH: '/services/vendor:/services'
     command: sh -c './bin/core migrate && exec ./bin/core start'
 
   tg:

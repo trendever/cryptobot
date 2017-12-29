@@ -3,7 +3,9 @@ lbKey:
   secret: 33b369d011d695540cd8b424c9aa4ea62c04ddce7800eb952ebeb822a20ec0cc
 
 debug: true
-dumpQueries: true
+#dumpQueries: true
+
+qorAddress: ":8777"
 
 proxy: ""
 sentryDNS: ""
