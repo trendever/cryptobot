@@ -30,6 +30,19 @@ const (
 	OperatorStatus_Utility OperatorStatus = 6
 )
 
+var OperatorStatusStrings = map[OperatorStatus]string{
+	OperatorStatus_None:     "none",
+	OperatorStatus_Inactive: "inactive",
+	OperatorStatus_Ready:    "ready",
+	OperatorStatus_Proposal: "proposal",
+	OperatorStatus_Busy:     "busy",
+	OperatorStatus_Utility:  "utility",
+}
+
+func (s OperatorStatus) String() string {
+	return OperatorStatusStrings[s]
+}
+
 type Operator struct {
 	ID           uint64
 	Username     string
