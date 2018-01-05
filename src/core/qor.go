@@ -4,11 +4,13 @@ import (
 	"common/db"
 	"common/log"
 	"core/proto"
+	"fmt"
 	"github.com/jinzhu/gorm"
 	"github.com/qor/admin"
 	"github.com/qor/qor"
 	"github.com/qor/validations"
 	"net/http"
+	"reflect"
 	"sort"
 )
 
@@ -72,6 +74,36 @@ var resources = []*resource{
 					},
 				})
 			}
+
+			res.Action(&admin.Action{
+				Name:  "Mark finished",
+				Modes: []string{"show", "menu_item"},
+				Handler: func(arg *admin.ActionArgument) error {
+					for _, record := range arg.FindSelectedRecords() {
+						order, ok := record.(*Order)
+						if !ok {
+							return fmt.Errorf("unexpected type %v in mark finished qor action", reflect.TypeOf(record))
+						}
+						if order.Status != proto.OrderStatus_Transfer {
+							return fmt.Errorf("order have unexpected status '%v'", order.Status)
+						}
+						order.Status = proto.OrderStatus_Finished
+						err := order.Save(arg.Context.DB)
+						if err != nil {
+							return fmt.Errorf("failed to save order: %v", err)
+						}
+					}
+					return nil
+				},
+				Visible: func(record interface{}, context *admin.Context) bool {
+					order, ok := record.(*Order)
+					if !ok {
+						log.Errorf("unexpected type %v in visible check of 'mark finished' qor action", reflect.TypeOf(record))
+						return false
+					}
+					return order.Status == proto.OrderStatus_Transfer
+				},
+			})
 		},
 	},
 }
