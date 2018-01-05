@@ -26,6 +26,13 @@ const (
 	TransactionDirection_From TransactionDirection = 1
 )
 
+func (t TransactionDirection) String() string {
+	if t == TransactionDirection_To {
+		return "to"
+	}
+	return "from"
+}
+
 type Operator struct {
 	db.Model
 	// from localbitcoins
@@ -55,7 +62,9 @@ func (op Operator) Encode() proto.Operator {
 }
 
 type LBTransaction struct {
-	ID        uint64
+	ID uint64
+	// username of lb account from which transaction was fetched
+	Account   string
 	Direction TransactionDirection
 	lbapi.Transaction
 }

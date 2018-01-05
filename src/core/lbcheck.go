@@ -33,6 +33,7 @@ func ProcessIncomingTx(event lbapi.Transaction) error {
 	// i'm not sure whether we can rely on lb log consistence, so it's better to try save everything every time
 	tx := db.NewTransaction().Set("gorm:insert_option", "ON CONFLICT DO NOTHING")
 	data := LBTransaction{
+		Account:     LBSelf.Username,
 		Direction:   TransactionDirection_To,
 		Transaction: event,
 	}
@@ -98,6 +99,7 @@ func ProcessIncomingTx(event lbapi.Transaction) error {
 
 func SaveOutgoingTx(event lbapi.Transaction) error {
 	err := db.New().Set("gorm:insert_option", "ON CONFLICT DO NOTHING").Create(&LBTransaction{
+		Account:     LBSelf.Username,
 		Direction:   TransactionDirection_From,
 		Transaction: event,
 	}).Error

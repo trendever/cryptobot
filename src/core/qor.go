@@ -60,6 +60,17 @@ var resources = []*resource{
 		config: &admin.Config{Name: "Operator"},
 		init:   operatorsInit,
 	},
+	{
+		value:  &LBTransaction{},
+		config: &admin.Config{Name: "LBTransaction"},
+		init:   lbTransactionsInit,
+	},
+}
+
+func lbTransactionsInit(res *admin.Resource) {
+	res.IndexAttrs(
+		"ID", "CreatedAt", "Account", "Direction", "Amount", "Description",
+	)
 }
 
 func operatorsInit(res *admin.Resource) {
@@ -155,7 +166,7 @@ func ordersInit(res *admin.Resource) {
 		"ClientName",
 	)
 	res.IndexAttrs(
-		"ID", "ClientName", "PaymentMethod", "FiatAmount", "Currency", "Status", "OperatorID",
+		"ID", "CreatedAt", "ClientName", "PaymentMethod", "FiatAmount", "Currency", "Status", "OperatorID",
 	)
 
 	statuses := make([]int, 0, len(proto.OrderStatusStrings))

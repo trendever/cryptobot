@@ -45,6 +45,8 @@ var conf struct {
 
 var (
 	CurrencyList []string
+	// current lb buffer account
+	LBSelf lbapi.Account
 	// bitcoin(lb one) address for refill if deposits
 	ReceivingAddress string
 )
@@ -90,12 +92,18 @@ func (srv service) Start() {
 	}
 	lbapi.DumpQueries = conf.DumpQueries
 
+	LBSelf, err = conf.LBKey.Self()
+	if err != nil {
+		log.Fatalf("failed to load lb account: %v", err)
+	}
+	log.Info("lb buffer username is '%v'", LBSelf.Username)
+
 	wallet, err := conf.LBKey.Wallet()
 	if err != nil {
 		log.Fatalf("failed to init-check buffer wallet: %v", err)
 	}
-
 	ReceivingAddress = wallet.ReceivingAddress
+
 	// I think load it just on start will be enough
 	CurrencyList, err = conf.LBKey.CurrencyList()
 	if err != nil {
