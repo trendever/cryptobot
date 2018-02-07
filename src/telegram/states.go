@@ -26,8 +26,8 @@ const ReloadTimeout = 3 * time.Second
 
 type StateActions struct {
 	Enter   func(s *Session)
-	Message func(s *Session, msg *telebot.Message)
-	Event   func(s *Session, event interface{})
+	Message MessageHandler
+	Event   EventHandler
 	Exit    func(s *Session)
 }
 
@@ -64,7 +64,7 @@ var statesInit = map[State]StateActions{
 				return
 
 			case M("help"):
-				log.Error(SendMessage(s.Dest(), M("help text"), nil))
+				helpHandler(s, msg)
 				return
 
 			case M("start serve"):

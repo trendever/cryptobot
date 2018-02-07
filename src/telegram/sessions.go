@@ -187,6 +187,12 @@ func (s *Session) loop() {
 		case <-s.stopper.Chan():
 			return
 		case msg := <-s.inbox:
+			// Check whether it is global command first
+			if handler, ok := commands[msg.Text]; ok {
+				handler(s, &msg)
+				continue
+			}
+			// Go for state-defined handler
 			actions, ok := states[s.State]
 			if !ok {
 				s.ChangeState(State_Unavailable)
