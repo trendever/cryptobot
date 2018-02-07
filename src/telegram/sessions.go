@@ -123,8 +123,8 @@ func (s *Session) SetOperatorStatus(status proto.OperatorStatus) error {
 	return err
 }
 
-func (s Session) Dest() chatDestination {
-	return Dest(s.Operator.TelegramChat)
+func (s Session) Dest() ChatDestination {
+	return DestinationForID(s.Operator.TelegramChat)
 }
 
 func (s *Session) Stop() {
@@ -168,6 +168,8 @@ func (s *Session) ReceiveMessage() *telebot.Message {
 	}
 }
 
+// Removes messages from inbox queue.
+// Honestly it cleans internal buffer of session only and there can be more messages outside it still
 func (s *Session) ClearInbox() {
 	for {
 		select {
@@ -195,6 +197,7 @@ func (s *Session) loop() {
 			// Go for state-defined handler
 			actions, ok := states[s.State]
 			if !ok {
+				log.Errorf("state '%v' do not have messages handler", s.State)
 				s.ChangeState(State_Unavailable)
 			} else {
 				actions.Message(s, &msg)

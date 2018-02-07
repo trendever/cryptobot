@@ -159,7 +159,7 @@ func getSession(chatID int64, notifyError bool) *Session {
 		if err != nil {
 			log.Errorf("failed to load session for chat %v: %v", chatID, err)
 			if notifyError {
-				log.Error(SendMessage(Dest(chatID), M("service unavailable"), nil))
+				log.Error(SendMessage(DestinationForID(chatID), M("service unavailable"), nil))
 			}
 			return nil
 		}

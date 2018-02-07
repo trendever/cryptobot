@@ -30,7 +30,7 @@ func init() {
 }
 
 func SendNotifyHandler(notify proto.SendNotifyMessage) bool {
-	err := SendMessage(chatDestination(notify.Destination), notify.Text, nil)
+	err := SendMessage(ChatDestination(notify.Destination), notify.Text, nil)
 	if err != nil {
 		log.Errorf("failed to send notify to %v: %v", notify.Destination, err)
 		if notify.Reliable {
