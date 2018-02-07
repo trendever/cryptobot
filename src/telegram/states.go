@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"github.com/tucnak/telebot"
 	"lbapi"
-	"time"
 )
 
 type State int
@@ -31,9 +30,6 @@ type StateActions struct {
 }
 
 var states map[State]StateActions
-
-// Timeout between actual attempts to reload session
-const ReloadTimeout = 3 * time.Second
 
 func init() {
 	// trick around initialization loop
@@ -107,7 +103,7 @@ func startStateMessage(s *Session, msg *telebot.Message) {
 		return
 
 	case M("show deposit"):
-		showDeposit(s)
+		depositHandler(s, msg)
 		return
 	}
 	log.Error(SendMessage(s.Dest(), M("start"), startKeyboard(s)))
@@ -128,26 +124,6 @@ func startKeyboard(s *Session) *telebot.SendOptions {
 	return Keyboard(keys...)
 }
 
-func showDeposit(s *Session) {
-	addr, err := GetDepositRefillAddress(s.Operator.ID)
-	if err != nil {
-		s.ChangeState(State_Unavailable)
-	}
-	op, err := OperatorByID(s.Operator.ID)
-	if err != nil {
-		s.ChangeState(State_Unavailable)
-	}
-	s.Operator = op
-	log.Error(SendMessage(
-		s.Dest(),
-		fmt.Sprintf(
-			"current deposit: %v\n"+
-				"for replenishment send localbitcoin trasfer to address %v with comment '%v%v'",
-			op.Deposit, addr, proto.DepositTransactionPrefix, op.ID),
-		startKeyboard(s)),
-	)
-}
-
 func unavailableStateEnter(s *Session) {
 	log.Error(SendMessage(s.Dest(), fmt.Sprintf(M("service unavailable")), Keyboard(
 		M("reload"),
@@ -163,17 +139,7 @@ func unavailableStateMessage(s *Session, msg *telebot.Message) {
 		)))
 		return
 	}
-	now := time.Now()
-	if s.context != nil {
-		lastTry := s.context.(time.Time)
-		if now.Sub(lastTry) < ReloadTimeout {
-			return
-		}
-	}
-	err := s.Reload()
-	if err != nil {
-		s.context = now
-	}
+	reloadHandler(s, msg)
 }
 
 func changeKeyStateEnter(s *Session) {
