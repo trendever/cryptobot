@@ -9,6 +9,7 @@ import (
 	"github.com/jinzhu/gorm"
 	"github.com/qor/admin"
 	"github.com/qor/qor"
+	"github.com/qor/roles"
 	"github.com/qor/validations"
 	"github.com/shopspring/decimal"
 	"net/http"
@@ -51,19 +52,30 @@ type resource struct {
 
 var resources = []*resource{
 	{
-		value:  &Order{},
-		config: &admin.Config{Name: "Order"},
-		init:   ordersInit,
+		value: &Order{},
+		config: &admin.Config{
+			Name: "Order",
+			Permission: roles.Deny(roles.Delete, roles.Anyone).
+				Deny(roles.Create, roles.Anyone).Deny(roles.Update, roles.Anyone),
+		},
+		init: ordersInit,
 	},
 	{
-		value:  &Operator{},
-		config: &admin.Config{Name: "Operator"},
-		init:   operatorsInit,
+		value: &Operator{},
+		config: &admin.Config{
+			Name:       "Operator",
+			Permission: roles.Deny(roles.Delete, roles.Anyone).Deny(roles.Create, roles.Anyone),
+		},
+		init: operatorsInit,
 	},
 	{
-		value:  &LBTransaction{},
-		config: &admin.Config{Name: "LBTransaction"},
-		init:   lbTransactionsInit,
+		value: &LBTransaction{},
+		config: &admin.Config{
+			Name: "LBTransaction",
+			Permission: roles.Deny(roles.Delete, roles.Anyone).
+				Deny(roles.Create, roles.Anyone).Deny(roles.Update, roles.Anyone),
+		},
+		init: lbTransactionsInit,
 	},
 }
 
@@ -71,6 +83,14 @@ func lbTransactionsInit(res *admin.Resource) {
 	res.IndexAttrs(
 		"ID", "CreatedAt", "Account", "Direction", "Amount", "Description",
 	)
+	res.ShowAttrs(&admin.Section{
+		Rows: [][]string{
+			{"Account", "Direction"},
+			{"CreatedAt", "Type"},
+			{"Amount", "Description"},
+			{"BitcoinTx"},
+		},
+	})
 }
 
 func operatorsInit(res *admin.Resource) {
@@ -80,6 +100,21 @@ func operatorsInit(res *admin.Resource) {
 	res.IndexAttrs(
 		"ID", "Username", "Deposit", "Status", "CurrentOrder",
 	)
+	res.ShowAttrs("-Public", "-Secret")
+	res.EditAttrs("Note")
+
+	res.Meta(&admin.Meta{
+		Name: "Note",
+		Type: "text",
+	})
+	// Make sure nothing but note can be saved(to avoid possible races)
+	res.SaveHandler = func(val interface{}, ctx *qor.Context) error {
+		op, ok := val.(*Operator)
+		if !ok {
+			return errors.New("unxepected record type")
+		}
+		return db.New().Model(op).Update("note", op.Note).Error
+	}
 
 	statuses := make([]int, 0, len(proto.OperatorStatusStrings))
 	for status := range proto.OperatorStatusStrings {
@@ -165,9 +200,32 @@ func ordersInit(res *admin.Resource) {
 	res.SearchAttrs(
 		"ClientName",
 	)
+	res.Meta(&admin.Meta{
+		Name: "OutletAmount",
+		Valuer: func(val interface{}, _ *qor.Context) interface{} {
+			order, ok := val.(*Order)
+			if !ok {
+				return ""
+			}
+			return order.OutletAmount()
+		},
+	})
 	res.IndexAttrs(
 		"ID", "CreatedAt", "ClientName", "PaymentMethod", "FiatAmount", "Currency", "Status", "OperatorID",
 	)
+
+	res.ShowAttrs(&admin.Section{
+		Rows: [][]string{
+			{"ID", "CreatedAt"},
+			{"Status", "OperatorID"},
+			{"ClientName", "PaymentMethod"},
+			{"Destination"},
+			{"FiatAmount", "Currency"},
+			{"LBAmount", "OutletAmount"},
+			{"LBFee", "OperatorFee"},
+			{"BotFee"},
+		},
+	})
 
 	statuses := make([]int, 0, len(proto.OrderStatusStrings))
 	for status := range proto.OrderStatusStrings {
@@ -186,8 +244,9 @@ func ordersInit(res *admin.Resource) {
 	}
 
 	res.Action(&admin.Action{
-		Name:  "Mark finished",
-		Modes: []string{"show", "menu_item"},
+		Name:       "Mark finished",
+		Modes:      []string{"show", "menu_item"},
+		Permission: roles.Allow(roles.Update, roles.Anyone),
 		Handler: func(arg *admin.ActionArgument) error {
 			for _, record := range arg.FindSelectedRecords() {
 				order, ok := record.(*Order)
