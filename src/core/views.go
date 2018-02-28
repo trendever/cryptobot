@@ -10,6 +10,7 @@ import (
 	"github.com/jinzhu/gorm"
 	"github.com/shopspring/decimal"
 	"lbapi"
+	"strconv"
 )
 
 func init() {
@@ -150,15 +151,24 @@ func SetOperatorKey(req proto.SetOperatorKeyRequest) (proto.Operator, error) {
 		return proto.Operator{}, errors.New(proto.DBError)
 
 	default:
-		if op.TelegramChat != req.ChatID {
-			// @TODO send something to old chat and ensure unique chatID
-		}
+		oldChat := op.TelegramChat
 		err = db.New().Model(&op).Updates(map[string]interface{}{
 			"telegram_chat": req.ChatID,
 			"status":        proto.OperatorStatus_Inactive,
 			"lb_key":        req.Key.Public,
 			"lb_secret":     req.Key.Secret,
 		}).Error
+		// @TODO Handle possible error on chat unique check
+		// @TODO What if account will be relinked while it is busy with order?
+
+		if err == nil && oldChat != req.ChatID {
+			err := SendTelegramNotify(strconv.FormatInt(op.TelegramChat, 10), fmt.Sprintf(
+				M("account %v was relinked to another telegram"), op.Username,
+			), false)
+			if err != nil {
+				log.Errorf("failed to notify old telegram about relinked account: %v", err)
+			}
+		}
 	}
 
 	if err != nil {

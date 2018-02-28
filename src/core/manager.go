@@ -179,7 +179,7 @@ func (man *orderManager) acceptOrder(accept accept) {
 	}
 
 	if op.Deposit.Cmp(order.LBAmount) < 0 {
-		log.Errorf("operator %v tried to accept order %v but do not have enough on deposit", accept.operatorID, order.ID, op.Status)
+		log.Errorf("operator %v tried to accept order %v but do not have enough on deposit", accept.operatorID, order.ID)
 		accept.reply <- acceptReply{
 			err: errors.New("lack of deposit"),
 		}
