@@ -55,16 +55,19 @@ type Operator struct {
 
 var CheckKey = rabbit.RPC{
 	Name:        "check_lb_key",
+	Concurrent:  true,
 	HandlerType: (func(lbapi.Key) (Operator, error))(nil),
 }
 
 var OperatorByTg = rabbit.RPC{
 	Name:        "operator_by_tg",
+	Concurrent:  true,
 	HandlerType: (func(chatID int64) (Operator, error))(nil),
 }
 
 var OperatorByID = rabbit.RPC{
 	Name:        "operator_by_id",
+	Concurrent:  true,
 	HandlerType: (func(operatorID uint64) (Operator, error))(nil),
 }
 
@@ -90,6 +93,7 @@ var SetOperatorKey = rabbit.RPC{
 
 var GetDepositRefillAddress = rabbit.RPC{
 	Name:        "get_deposi_refill_address",
+	Concurrent:  true,
 	HandlerType: (func(operatorID uint64) (string, error))(nil),
 }
 
@@ -181,6 +185,7 @@ var OrderEventRoute = rabbit.Route{
 
 var CreateOrder = rabbit.RPC{
 	Name:        "create_order",
+	Concurrent:  true,
 	HandlerType: (func(Order) (Order, error))(nil),
 	Timeout:     time.Second * 20,
 }
@@ -193,6 +198,7 @@ var CancelOrder = rabbit.RPC{
 
 var GetOrder = rabbit.RPC{
 	Name:        "get_order",
+	Concurrent:  true,
 	HandlerType: (func(id uint64) (Order, error))(nil),
 }
 
