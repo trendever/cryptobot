@@ -135,8 +135,10 @@ func SetOperatorKey(req proto.SetOperatorKeyRequest) (proto.Operator, error) {
 		return proto.Operator{}, err
 	}
 
+	tx := db.NewTransaction()
+
 	var op Operator
-	scope := db.New().First(&op, "username = ?", acc.Username)
+	scope := tx.First(&op, "username = ?", acc.Username)
 	switch {
 	case scope.RecordNotFound():
 		op.Username = acc.Username
@@ -145,34 +147,28 @@ func SetOperatorKey(req proto.SetOperatorKeyRequest) (proto.Operator, error) {
 		op.Status = proto.OperatorStatus_Inactive
 		op.Key = req.Key
 		err = db.New().Create(&op).Error
+		if err != nil {
+			log.Errorf("failed to save operator %v: %v", op.ID, err)
+			tx.Rollback()
+			return proto.Operator{}, errors.New(proto.DBError)
+		}
 
 	case scope.Error != nil:
 		log.Errorf("failed to load operator '%v': %v", acc.Username, scope.Error)
+		tx.Rollback()
 		return proto.Operator{}, errors.New(proto.DBError)
 
 	default:
-		oldChat := op.TelegramChat
-		err = db.New().Model(&op).Updates(map[string]interface{}{
-			"telegram_chat": req.ChatID,
-			"status":        proto.OperatorStatus_Inactive,
-			"lb_key":        req.Key.Public,
-			"lb_secret":     req.Key.Secret,
-		}).Error
-		// @TODO Handle possible error on chat unique check
-		// @TODO What if account will be relinked while it is busy with order?
-
-		if err == nil && oldChat != req.ChatID {
-			err := SendTelegramNotify(strconv.FormatInt(op.TelegramChat, 10), fmt.Sprintf(
-				M("account %v was relinked to another telegram"), op.Username,
-			), false)
-			if err != nil {
-				log.Errorf("failed to notify old telegram about relinked account: %v", err)
-			}
+		err = relinkAccount(tx, &op, &req)
+		if err != nil {
+			tx.Rollback()
+			return proto.Operator{}, err
 		}
 	}
 
+	err = tx.Commit().Error
 	if err != nil {
-		log.Errorf("failed to save operator %v: %v", op.ID, err)
+		log.Errorf("failed to commit SetOperatorKey transaction: %v", err)
 		return proto.Operator{}, errors.New(proto.DBError)
 	}
 
@@ -184,6 +180,69 @@ func SetOperatorKey(req proto.SetOperatorKeyRequest) (proto.Operator, error) {
 		HasValidKey:  true,
 		CurrentOrder: op.CurrentOrder,
 	}, nil
+}
+
+func relinkAccount(tx *gorm.DB, op *Operator, req *proto.SetOperatorKeyRequest) error {
+	if req.ChatID == op.TelegramChat {
+		// Just update key & done
+		err := tx.Model(&op).Updates(map[string]interface{}{
+			"lb_key":    req.Key.Public,
+			"lb_secret": req.Key.Secret,
+		}).Error
+		if err != nil {
+			log.Errorf("failed to update key: %v", err)
+			return errors.New(proto.DBError)
+		}
+	}
+
+	var oldOp Operator
+	scope := tx.Where("telegram_chat = ? ", req.ChatID).Where("id <> ?", op.ID).First(&oldOp)
+
+	switch {
+	case scope.RecordNotFound():
+
+	case scope.Error != nil:
+		log.Errorf("failed to load old operator: %v", scope.Error)
+		return errors.New(proto.DBError)
+
+	default:
+		if oldOp.Status == proto.OperatorStatus_Busy {
+			log.Errorf("operator with chat %v(%v) tried to change lb account while was busy with order", req.ChatID, oldOp.Username)
+			return errors.New("forbidden")
+		}
+		err := tx.Model(&oldOp).Updates(map[string]interface{}{
+			"telegram_chat": req.ChatID,
+			"status":        proto.OperatorStatus_None,
+		})
+		if err != nil {
+			log.Errorf("failed o detach old account on relink: %v", err)
+			return errors.New(proto.DBError)
+		}
+	}
+
+	oldChat := op.TelegramChat
+	err := db.New().Model(&op).Updates(map[string]interface{}{
+		"telegram_chat": req.ChatID,
+		"lb_key":        req.Key.Public,
+		"lb_secret":     req.Key.Secret,
+	}).Error
+
+	if err != nil {
+		log.Errorf("failed to update operator: %v", err)
+		return errors.New(proto.DBError)
+	}
+
+	if oldChat != req.ChatID {
+		go func() {
+			err := SendTelegramNotify(strconv.FormatInt(op.TelegramChat, 10), fmt.Sprintf(
+				M("account %v was relinked to another telegram"), op.Username,
+			), false)
+			if err != nil {
+				log.Errorf("failed to notify old telegram about relinked account: %v", err)
+			}
+		}()
+	}
+	return nil
 }
 
 func CreateOrder(req proto.Order) (proto.Order, error) {
