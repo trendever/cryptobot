@@ -78,6 +78,7 @@ type SetOperatorStatusRequest struct {
 
 var SetOperatorStatus = rabbit.RPC{
 	Name:        "set_operator_status",
+	Concurrent:  true,
 	HandlerType: (func(SetOperatorStatusRequest) (bool, error))(nil),
 }
 
@@ -192,6 +193,7 @@ var CreateOrder = rabbit.RPC{
 
 var CancelOrder = rabbit.RPC{
 	Name:        "cancel_order",
+	Concurrent:  true,
 	HandlerType: (func(orderID uint64) (bool, error))(nil),
 	Timeout:     time.Second * 5,
 }
@@ -209,6 +211,7 @@ type AcceptOfferRequest struct {
 
 var AcceptOffer = rabbit.RPC{
 	Name:        "accept_offer",
+	Concurrent:  true,
 	HandlerType: (func(AcceptOfferRequest) (Order, error))(nil),
 }
 
@@ -219,6 +222,7 @@ type SkipOfferRequest struct {
 
 var SkipOffer = rabbit.RPC{
 	Name:        "skip_offer",
+	Concurrent:  true,
 	HandlerType: (func(SkipOfferRequest) (bool, error))(nil),
 }
 
@@ -230,6 +234,7 @@ type DropOrderRequest struct {
 // Drop accepted order
 var DropOrder = rabbit.RPC{
 	Name:        "drop_order",
+	Concurrent:  true,
 	HandlerType: (func(DropOrderRequest) (bool, error))(nil),
 }
 
@@ -240,21 +245,25 @@ type LinkLBContractRequest struct {
 
 var LinkLBContact = rabbit.RPC{
 	Name:        "link_lb_contact",
+	Concurrent:  true,
 	HandlerType: (func(LinkLBContractRequest) (Order, error))(nil),
 	Timeout:     time.Second * 10,
 }
 
 var RequestPayment = rabbit.RPC{
 	Name:        "request_payment",
+	Concurrent:  true,
 	HandlerType: (func(orderID uint64) (Order, error))(nil),
 }
 
 var MarkPayed = rabbit.RPC{
 	Name:        "mark_payed",
+	Concurrent:  true,
 	HandlerType: (func(orderID uint64) (bool, error))(nil),
 }
 
 var ConfirmPayment = rabbit.RPC{
 	Name:        "confirm_payment",
+	Concurrent:  true,
 	HandlerType: (func(orderID uint64) (bool, error))(nil),
 }
