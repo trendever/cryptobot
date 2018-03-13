@@ -61,6 +61,27 @@ func (op Operator) Encode() proto.Operator {
 	}
 }
 
+// Loads operator and lock for transaction lifetime using current data as conditions
+func (op *Operator) LockLoad(tx *gorm.DB) error {
+	return tx.Set("gorm:query_option", "FOR UPDATE").Where(op).First(op).Error
+}
+
+func LockLoadOperatorByID(tx *gorm.DB, id uint64) (Operator, error) {
+	op := Operator{Model: db.Model{ID: id}}
+	err := op.LockLoad(tx)
+	return op, err
+}
+
+// Saves everything except deposit
+func (op *Operator) Save(tx *gorm.DB) error {
+	err := tx.Omit("deposit").Save(op).Error
+	return err
+}
+
+func (op Operator) ChangeDeposit(tx *gorm.DB, amount decimal.Decimal) error {
+	return tx.Model(&op).Update("deposit", gorm.Expr("deposit + ?", amount)).Error
+}
+
 type LBTransaction struct {
 	ID uint64
 	// username of lb account from which transaction was fetched
@@ -87,6 +108,16 @@ type Order struct {
 	BotFee      decimal.Decimal `gorm:"type:decimal"`
 	Status      proto.OrderStatus
 	OperatorID  uint64
+}
+
+func (order *Order) LockLoad(tx *gorm.DB) error {
+	return tx.Set("gorm:query_option", "FOR UPDATE").Where(order).First(order).Error
+}
+
+func LockLoadOrderByID(tx *gorm.DB, id uint64) (Order, error) {
+	order := Order{Model: db.Model{ID: id}}
+	err := order.LockLoad(tx)
+	return order, err
 }
 
 func (order *Order) Save(db *gorm.DB) error {

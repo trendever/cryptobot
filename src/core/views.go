@@ -99,29 +99,41 @@ func OperatorByID(operatorID uint64) (proto.Operator, error) {
 }
 
 func SetOperatorStatus(req proto.SetOperatorStatusRequest) (bool, error) {
-	var op Operator
-	err := db.New().First(&op, "telegram_chat = ?", req.ChatID).Error
+	tx := db.NewTransaction()
+
+	op := Operator{TelegramChat: req.ChatID}
+	err := op.LockLoad(tx)
 	if err != nil {
 		log.Errorf("failed to load operator for chat %v: %v", req.ChatID, err)
+		tx.Rollback()
 		return false, errors.New(proto.DBError)
 	}
+
 	if op.Status == proto.OperatorStatus_Busy {
+		tx.Rollback()
 		return false, errors.New("operator is busy")
 	}
-	var updMap = map[string]interface{}{
-		"status": req.Status,
-	}
+	op.Status = req.Status
 	if op.Status == proto.OperatorStatus_Proposal {
-		updMap["current_order"] = 0
+		op.CurrentOrder = 0
 	}
-	err = db.New().Model(&op).Updates(updMap).Error
+	err = op.Save(tx)
 	if err != nil {
 		log.Errorf("failed to update operator status: %v", err)
+		tx.Rollback()
 		return false, errors.New(proto.DBError)
 	}
+
 	if req.Status == proto.OperatorStatus_Ready {
 		manager.PushOperator(op)
 	}
+
+	err = tx.Commit().Error
+	if err != nil {
+		log.Errorf("failed to commit in SetOperatorStatus()", err)
+		return false, errors.New(proto.DBError)
+	}
+
 	return true, nil
 }
 
@@ -137,33 +149,33 @@ func SetOperatorKey(req proto.SetOperatorKeyRequest) (proto.Operator, error) {
 
 	tx := db.NewTransaction()
 
-	var op Operator
-	scope := tx.First(&op, "username = ?", acc.Username)
+	op := Operator{Username: acc.Username}
+	err = op.LockLoad(tx)
 	switch {
-	case scope.RecordNotFound():
+	case err == nil:
+		err = relinkAccount(tx, &op, &req)
+		if err != nil {
+			tx.Rollback()
+			return proto.Operator{}, err
+		}
+
+	case err.Error() == "record not found":
 		op.Username = acc.Username
 		op.Deposit = decimal.Zero
 		op.TelegramChat = req.ChatID
 		op.Status = proto.OperatorStatus_Inactive
 		op.Key = req.Key
-		err = db.New().Create(&op).Error
+		err = tx.Create(&op).Error
 		if err != nil {
 			log.Errorf("failed to save operator %v: %v", op.ID, err)
 			tx.Rollback()
 			return proto.Operator{}, errors.New(proto.DBError)
 		}
 
-	case scope.Error != nil:
-		log.Errorf("failed to load operator '%v': %v", acc.Username, scope.Error)
+	default:
+		log.Errorf("failed to load operator '%v': %v", acc.Username, err)
 		tx.Rollback()
 		return proto.Operator{}, errors.New(proto.DBError)
-
-	default:
-		err = relinkAccount(tx, &op, &req)
-		if err != nil {
-			tx.Rollback()
-			return proto.Operator{}, err
-		}
 	}
 
 	err = tx.Commit().Error
@@ -172,14 +184,7 @@ func SetOperatorKey(req proto.SetOperatorKeyRequest) (proto.Operator, error) {
 		return proto.Operator{}, errors.New(proto.DBError)
 	}
 
-	return proto.Operator{
-		ID:           op.ID,
-		Username:     acc.Username,
-		TelegramChat: op.TelegramChat,
-		Status:       op.Status,
-		HasValidKey:  true,
-		CurrentOrder: op.CurrentOrder,
-	}, nil
+	return op.Encode(), nil
 }
 
 func relinkAccount(tx *gorm.DB, op *Operator, req *proto.SetOperatorKeyRequest) error {
@@ -195,33 +200,36 @@ func relinkAccount(tx *gorm.DB, op *Operator, req *proto.SetOperatorKeyRequest) 
 		}
 	}
 
-	var oldOp Operator
-	scope := tx.Where("telegram_chat = ? ", req.ChatID).Where("id <> ?", op.ID).First(&oldOp)
+	oldOp := Operator{TelegramChat: req.ChatID}
+	err := oldOp.LockLoad(tx)
 
 	switch {
-	case scope.RecordNotFound():
+	case oldOp.ID == op.ID:
 
-	case scope.Error != nil:
-		log.Errorf("failed to load old operator: %v", scope.Error)
-		return errors.New(proto.DBError)
-
-	default:
+	case err == nil:
 		if oldOp.Status == proto.OperatorStatus_Busy {
 			log.Errorf("operator with chat %v(%v) tried to change lb account while was busy with order", req.ChatID, oldOp.Username)
 			return errors.New("forbidden")
 		}
+
 		err := tx.Model(&oldOp).Updates(map[string]interface{}{
-			"telegram_chat": req.ChatID,
+			"telegram_chat": gorm.Expr("NULL"),
 			"status":        proto.OperatorStatus_None,
-		})
+		}).Error
 		if err != nil {
 			log.Errorf("failed o detach old account on relink: %v", err)
 			return errors.New(proto.DBError)
 		}
+
+	case err.Error() == "record not found":
+
+	default:
+		log.Errorf("failed to load old operator: %v", err)
+		return errors.New(proto.DBError)
 	}
 
 	oldChat := op.TelegramChat
-	err := db.New().Model(&op).Updates(map[string]interface{}{
+	err = tx.Model(&op).Updates(map[string]interface{}{
 		"telegram_chat": req.ChatID,
 		"lb_key":        req.Key.Public,
 		"lb_secret":     req.Key.Secret,
@@ -234,7 +242,7 @@ func relinkAccount(tx *gorm.DB, op *Operator, req *proto.SetOperatorKeyRequest) 
 
 	if oldChat != req.ChatID {
 		go func() {
-			err := SendTelegramNotify(strconv.FormatInt(op.TelegramChat, 10), fmt.Sprintf(
+			err := SendTelegramNotify(strconv.FormatInt(oldChat, 10), fmt.Sprintf(
 				M("account %v was relinked to another telegram"), op.Username,
 			), false)
 			if err != nil {
@@ -310,53 +318,68 @@ func AcceptOffer(req proto.AcceptOfferRequest) (proto.Order, error) {
 }
 
 func SkipOffer(req proto.SkipOfferRequest) (bool, error) {
-	var op Operator
-	err := db.New().First(&op, "id = ?", req.OperatorID).Error
+	tx := db.NewTransaction()
+	op, err := LockLoadOperatorByID(tx, req.OperatorID)
 	if err != nil {
 		log.Errorf("failed to load operator %v: %v", req.OperatorID, err)
+		tx.Rollback()
 		return false, errors.New(proto.DBError)
 	}
 	if op.Status != proto.OperatorStatus_Proposal || op.CurrentOrder != req.OrderID {
 		log.Debug("operator %v tried to skip offer %v while his current status was %v, order %v",
 			req.OperatorID, req.OrderID, op.Status, op.CurrentOrder)
+		tx.Rollback()
 		return false, errors.New("unexpected status")
 	}
-	err = db.New().Model(&op).Updates(map[string]interface{}{
+
+	err = tx.Model(&op).Updates(map[string]interface{}{
 		"status": proto.OperatorStatus_Ready,
 	}).Error
 	if err != nil {
 		log.Errorf("failed to save operator %v: %v", op.ID, err)
+		tx.Rollback()
 		return false, errors.New(proto.DBError)
 	}
+
+	err = tx.Commit().Error
+	if err != nil {
+		log.Errorf("failed to commit in SkipOrder: %v", err)
+		return false, errors.New(proto.DBError)
+	}
+
 	manager.PushOperator(op)
 	return true, nil
 }
 
 func DropOrder(req proto.DropOrderRequest) (bool, error) {
-	var op Operator
-	err := db.New().First(&op, "id = ?", req.OperatorID).Error
+	tx := db.NewTransaction()
+
+	op, err := LockLoadOperatorByID(tx, req.OperatorID)
 	if err != nil {
 		log.Errorf("failed to load operator %v: %v", req.OperatorID, err)
+		tx.Rollback()
 		return false, errors.New(proto.DBError)
 	}
 	if op.Status != proto.OperatorStatus_Busy || op.CurrentOrder != req.OrderID {
 		log.Debug("operator %v tried to drop order %v while his current status was %v, order %v",
 			req.OperatorID, req.OrderID, op.Status, op.CurrentOrder)
+		tx.Rollback()
 		return false, errors.New("unexpected status")
 	}
-	var order Order
-	err = db.New().First(&order, "id = ?", req.OrderID).Error
+
+	order, err := LockLoadOrderByID(tx, req.OrderID)
 	if err != nil {
 		log.Errorf("failed to load order %v: %v", req.OrderID, err)
+		tx.Rollback()
 		return false, errors.New(proto.DBError)
 	}
 	if order.Status != proto.OrderStatus_Accepted && order.Status != proto.OrderStatus_Linked {
 		log.Debug("operator %v tried to drop order %v while order had status %v",
 			req.OperatorID, req.OrderID, order.Status)
+		tx.Rollback()
 		return false, errors.New("unexpected status")
 	}
 
-	tx := db.NewTransaction()
 	order.Status = proto.OrderStatus_Dropped
 	err = order.Save(tx)
 	if err != nil {
@@ -375,10 +398,10 @@ func DropOrder(req proto.DropOrderRequest) (bool, error) {
 
 	err = tx.Commit().Error
 	if err != nil {
-		log.Errorf("failed to commit: %v", err)
-		tx.Rollback()
+		log.Errorf("failed to commit in DropOrder: %v", err)
 		return false, errors.New(proto.DBError)
 	}
+
 	return true, nil
 }
 
@@ -386,21 +409,25 @@ func LinkLBContract(req proto.LinkLBContractRequest) (proto.Order, error) {
 	if req.Requisites == "" {
 		return proto.Order{}, errors.New("empty requisites")
 	}
-	var order Order
-	err := db.New().First(&order, "id = ?", req.OrderID).Error
+
+	tx := db.NewTransaction()
+
+	order, err := LockLoadOrderByID(tx, req.OrderID)
 	if err != nil {
 		log.Errorf("failed to load order %v: %v", req.OrderID, err)
+		tx.Rollback()
 		return proto.Order{}, errors.New(proto.DBError)
 	}
 
 	if order.Status != proto.OrderStatus_Accepted && order.Status != proto.OrderStatus_Linked {
+		tx.Rollback()
 		return proto.Order{}, errors.New("unexpected status")
 	}
 
-	var op Operator
-	err = db.New().First(&op, "id = ?", order.OperatorID).Error
+	op, err := LockLoadOperatorByID(tx, order.OperatorID)
 	if err != nil {
 		log.Errorf("failed to load operator %v: %v", order.OperatorID, err)
+		tx.Rollback()
 		return proto.Order{}, errors.New(proto.DBError)
 	}
 
@@ -414,6 +441,7 @@ func LinkLBContract(req proto.LinkLBContractRequest) (proto.Order, error) {
 		}
 	}
 	if !found {
+		tx.Rollback()
 		return order.Encode(), errors.New(proto.ContactNotFoundError)
 	}
 
@@ -425,35 +453,52 @@ func LinkLBContract(req proto.LinkLBContractRequest) (proto.Order, error) {
 	order.Status = proto.OrderStatus_Linked
 	order.PaymentRequisites = req.Requisites
 
-	err = order.Save(db.New())
+	err = order.Save(tx)
 	if err != nil {
+		log.Errorf("failed to save order: %v", err)
+		tx.Rollback()
 		return proto.Order{}, errors.New(proto.DBError)
+	}
+
+	err = tx.Commit().Error
+	if err != nil {
+		log.Errorf("failed to commit in LinkLBContact: %v", err)
+		return order.Encode(), errors.New(proto.DBError)
 	}
 
 	return order.Encode(), nil
 }
 
 func RequestPayment(orderID uint64) (proto.Order, error) {
-	var order Order
-	err := db.New().First(&order, "id = ?", orderID).Error
+	tx := db.NewTransaction()
+	order, err := LockLoadOrderByID(tx, orderID)
 	if err != nil {
 		log.Errorf("failed to load order %v: %v", orderID, err)
+		tx.Rollback()
 		return proto.Order{}, errors.New(proto.DBError)
 	}
 	order.Status = proto.OrderStatus_Payment
-	err = order.Save(db.New())
+	err = order.Save(tx)
 	if err != nil {
+		tx.Rollback()
 		return proto.Order{}, errors.New(proto.DBError)
+	}
+
+	err = tx.Commit().Error
+	if err != nil {
+		log.Errorf("failed to commit in RequestPayment: %v", err)
+		return order.Encode(), errors.New(proto.DBError)
 	}
 
 	return order.Encode(), nil
 }
 
 func CancelOrder(orderID uint64) (bool, error) {
-	var order Order
-	err := db.New().First(&order, "id = ?", orderID).Error
+	tx := db.NewTransaction()
+	order, err := LockLoadOrderByID(tx, orderID)
 	if err != nil {
 		log.Errorf("failed to load order %v: %v", orderID, err)
+		tx.Rollback()
 		return false, errors.New(proto.DBError)
 	}
 	switch order.Status {
@@ -461,18 +506,16 @@ func CancelOrder(orderID uint64) (bool, error) {
 		proto.OrderStatus_Linked, proto.OrderStatus_Payment,
 		proto.OrderStatus_Confirmation:
 	default:
+		tx.Rollback()
 		return false, errors.New("unexpected status")
 	}
 	order.Status = proto.OrderStatus_Canceled
 
-	tx := db.NewTransaction()
-
 	if order.OperatorID != 0 {
-		var op Operator
-		err = db.New().First(&op, "id = ?", order.OperatorID).Error
+		op, err := LockLoadOperatorByID(tx, order.OperatorID)
 		if err != nil {
-			tx.Rollback()
 			log.Errorf("failed to load operator %v: %v", order.OperatorID, err)
+			tx.Rollback()
 			return false, errors.New(proto.DBError)
 		}
 
@@ -481,6 +524,7 @@ func CancelOrder(orderID uint64) (bool, error) {
 			"current_order": 0,
 		}).Error
 		if err != nil {
+			log.Debug("failed to withdraw order from operator: %v", err)
 			tx.Rollback()
 			return false, errors.New(proto.DBError)
 		}
@@ -488,81 +532,110 @@ func CancelOrder(orderID uint64) (bool, error) {
 
 	err = order.Save(tx)
 	if err != nil {
+		log.Debug("failed to save order: %v", err)
 		tx.Rollback()
 		return false, errors.New(proto.DBError)
 	}
+
 	err = tx.Commit().Error
 	if err != nil {
+		log.Errorf("failed to commit in CancelOrder: %v", err)
 		return false, errors.New(proto.DBError)
 	}
+
 	return true, nil
 }
 
 func MarkPayed(orderID uint64) (bool, error) {
-	var order Order
-	err := db.New().First(&order, "id = ?", orderID).Error
+	tx := db.NewTransaction()
+	order, err := LockLoadOrderByID(tx, orderID)
 	if err != nil {
 		log.Errorf("failed to load order %v: %v", orderID, err)
+		tx.Rollback()
 		return false, errors.New(proto.DBError)
 	}
 	if order.Status != proto.OrderStatus_Payment && order.Status != proto.OrderStatus_Confirmation {
+		tx.Rollback()
 		return false, errors.New("unexpected status")
 	}
 	order.Status = proto.OrderStatus_Confirmation
-	err = order.Save(db.New())
+	err = order.Save(tx)
 	if err != nil {
+		log.Debug("failed to save order: %v", err)
+		tx.Rollback()
 		return false, errors.New(proto.DBError)
 	}
+
+	err = tx.Commit().Error
+	if err != nil {
+		log.Errorf("failed to commit in MarkPayed: %v", err)
+		return false, errors.New(proto.DBError)
+	}
+
 	return true, nil
 }
 
 func ConfirmPayment(orderID uint64) (bool, error) {
-	var order Order
-	err := db.New().First(&order, "id = ?", orderID).Error
+	tx := db.NewTransaction()
+	order, err := LockLoadOrderByID(tx, orderID)
 	if err != nil {
 		log.Errorf("failed to load order %v: %v", orderID, err)
-		return false, errors.New(proto.DBError)
-	}
-	if order.Status != proto.OrderStatus_Confirmation {
-		return false, errors.New("unexpected status")
-	}
-
-	var op Operator
-	err = db.New().First(&op, "id = ?", order.OperatorID).Error
-	if err != nil {
-		log.Errorf("failed to load operator %v: %v", order.OperatorID, err)
-		return false, errors.New(proto.DBError)
-	}
-
-	tx := db.NewTransaction()
-	// Amount to write-off from op deposit: contact_sum - lb_fee - op_fee
-	amount := order.LBAmount.Sub(order.LBFee).Sub(order.OperatorFee)
-	err = tx.Model(&op).Updates(map[string]interface{}{
-		"status":        proto.OperatorStatus_Inactive,
-		"current_order": 0,
-		"deposit":       gorm.Expr("deposit - ?", amount),
-	}).Error
-	if err != nil {
 		tx.Rollback()
 		return false, errors.New(proto.DBError)
 	}
+	if order.Status != proto.OrderStatus_Confirmation {
+		tx.Rollback()
+		return false, errors.New("unexpected status")
+	}
+
+	op, err := LockLoadOperatorByID(tx, order.OperatorID)
+	if err != nil {
+		log.Errorf("failed to load operator %v: %v", order.OperatorID, err)
+		tx.Rollback()
+		return false, errors.New(proto.DBError)
+	}
+
+	// Amount to write-off from op deposit: contact_sum - lb_fee - op_fee
+	amount := order.LBAmount.Sub(order.LBFee).Sub(order.OperatorFee)
+	err = op.ChangeDeposit(tx, amount.Neg())
+	if err != nil {
+		log.Errorf("failed to write-off: %v", err)
+		tx.Rollback()
+		return false, errors.New(proto.DBError)
+	}
+
+	err = tx.Model(&op).Updates(map[string]interface{}{
+		"status":        proto.OperatorStatus_Inactive,
+		"current_order": 0,
+	}).Error
+	if err != nil {
+		log.Errorf("failed to update oparator: %v", err)
+		tx.Rollback()
+		return false, errors.New(proto.DBError)
+	}
+
 	// @TODO Transfer coins to client from bs buffer
 	order.Status = proto.OrderStatus_Transfer
 	err = order.Save(tx)
 	if err != nil {
+		log.Errorf("failed to save order: %v", err)
 		tx.Rollback()
 		return false, errors.New(proto.DBError)
 	}
+
 	err = SendTelegramNotify(conf.TelegramChanel, fmt.Sprintf(
 		"order %v reached transfer status\ndestination: %v\noutlet amount: %v",
 		order.ID, order.Destination, order.OutletAmount(),
 	), true)
 	if err != nil {
+		log.Errorf("failed to send fransfer notify: %v", err)
 		tx.Rollback()
 		return false, errors.New("notify failed")
 	}
+
 	err = tx.Commit().Error
 	if err != nil {
+		log.Errorf("failed to commit in ConfirmPayment: %v", err)
 		return false, errors.New(proto.DBError)
 	}
 	return true, nil

@@ -153,7 +153,7 @@ func operatorsInit(res *admin.Resource) {
 				tx.Rollback()
 				return errors.New("unxepected record type")
 			}
-			err := tx.Model(&op).Update("deposit", gorm.Expr("deposit + ?", arg.Amount)).Error
+			err := op.ChangeDeposit(tx, arg.Amount)
 			if err != nil {
 				tx.Rollback()
 				return err

@@ -158,21 +158,23 @@ func (man *orderManager) acceptOrder(accept accept) {
 		return
 	}
 
-	var op Operator
 	tx := db.NewTransaction()
-	scope := tx.First(&op, "id = ?", accept.operatorID)
-	if scope.RecordNotFound() {
+	op, err := LockLoadOperatorByID(tx, accept.operatorID)
+	switch {
+	case err == nil:
+
+	case err.Error() == "record not found":
 		log.Errorf("unknown operator id %v in order accept", accept.operatorID)
 		accept.reply <- acceptReply{
 			err: errors.New("unknown operator"),
 		}
 		tx.Rollback()
 		return
-	}
-	if scope.Error != nil {
-		log.Errorf("failed to load operator %v: %v", accept.operatorID, scope.Error)
+
+	default:
+		log.Errorf("failed to load operator %v: %v", accept.operatorID, err)
 		accept.reply <- acceptReply{
-			err: errors.New("db error"),
+			err: errors.New(proto.DBError),
 		}
 		tx.Rollback()
 		return
@@ -195,6 +197,7 @@ func (man *orderManager) acceptOrder(accept accept) {
 		tx.Rollback()
 		return
 	}
+
 	if op.CurrentOrder != accept.orderID {
 		log.Errorf("operator %v tried to accept order %v while his current order was %v", accept.operatorID, order.ID, op.CurrentOrder)
 		accept.reply <- acceptReply{
@@ -204,7 +207,7 @@ func (man *orderManager) acceptOrder(accept accept) {
 		return
 	}
 
-	err := tx.Model(&op).Update("status", proto.OperatorStatus_Busy).Error
+	err = tx.Model(&op).Update("status", proto.OperatorStatus_Busy).Error
 	if err != nil {
 		log.Errorf("failed to save operator: %v", err)
 		accept.reply <- acceptReply{
@@ -241,17 +244,34 @@ func (man *orderManager) acceptOrder(accept accept) {
 }
 
 func OfferOrder(op Operator, order Order) error {
-	_, err := SendOffer(tg.SendOfferRequest{
+	tx := db.NewTransaction()
+	err := op.LockLoad(tx)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	if op.Status != proto.OperatorStatus_Ready {
+		tx.Rollback()
+		return nil
+	}
+
+	_, err = SendOffer(tg.SendOfferRequest{
 		ChatID: op.TelegramChat,
 		Order:  order.Encode(),
 	})
 	if err != nil {
+		tx.Rollback()
 		return err
 	}
-	return db.New().Model(op).Updates(map[string]interface{}{
+	err = tx.Model(op).Updates(map[string]interface{}{
 		"status":        proto.OperatorStatus_Proposal,
 		"current_order": order.ID,
 	}).Error
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	return tx.Commit().Error
 }
 
 func RejectOrder(order Order) error {
