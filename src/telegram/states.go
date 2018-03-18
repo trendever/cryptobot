@@ -354,7 +354,7 @@ func serveOrderStateEnter(s *Session) {
 	case proto.OrderStatus_Linked:
 		log.Error(SendMessage(s.Dest(), fmt.Sprintf(
 			M("lb link: %v\ncontact amount: %v\nrequsites:\n%v"),
-			fmt.Sprintf("https://localbitcoins.com/request/online_sell_buyer/%v", order.LBContractID),
+			fmt.Sprintf("https://localbitcoins.net/request/online_sell_buyer/%v", order.LBContractID),
 			order.LBAmount, order.PaymentRequisites,
 		), Keyboard(M("confirm"), M("drop"))))
 
@@ -485,7 +485,7 @@ func serveOrderStateMessage(s *Session, msg *telebot.Message) {
 			s.context = order
 			log.Error(SendMessage(s.Dest(), fmt.Sprintf(
 				M("lb link: %v\ncontact amount: %v\nrequsites:\n%v"),
-				fmt.Sprintf("https://localbitcoins.com/request/online_sell_buyer/%v", order.LBContractID),
+				fmt.Sprintf("https://localbitcoins.net/request/online_sell_buyer/%v", order.LBContractID),
 				order.LBAmount, order.PaymentRequisites,
 			), Keyboard(M("confirm"), M("drop"))))
 
