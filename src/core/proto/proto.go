@@ -11,6 +11,7 @@ type OperatorStatus int
 
 var (
 	DBError              = "db error"
+	ForbiddenError       = "forbidden"
 	ContactNotFoundError = "contact not found"
 )
 
@@ -89,6 +90,7 @@ type SetOperatorKeyRequest struct {
 
 var SetOperatorKey = rabbit.RPC{
 	Name:        "set_operator_key",
+	Timeout:     5 * time.Second,
 	HandlerType: (func(SetOperatorKeyRequest) (Operator, error))(nil),
 }
 

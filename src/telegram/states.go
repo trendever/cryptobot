@@ -191,21 +191,31 @@ func changeKeyStateMessage(s *Session, msg *telebot.Message) {
 		log.Error(SendMessage(s.Dest(), fmt.Sprintf(M("key belogs to %v"), op.Username), nil))
 
 		if s.Operator.ID != 0 && op.ID != s.Operator.ID {
-			log.Error(SendMessage(s.Dest(), fmt.Sprintf(M("previos account tat was attached to this chat is %v"), s.Operator.Username), nil))
+			log.Error(SendMessage(s.Dest(), fmt.Sprintf(M("previos account attached to this chat was %v"), s.Operator.Username), nil))
 		}
 
 		op, err = SetOperatorKey(proto.SetOperatorKeyRequest{
 			ChatID: s.Operator.TelegramChat,
 			Key:    key,
 		})
-		if err != nil {
+		switch {
+		// Everything went fine, refresh session data now
+		case err == nil:
+			s.Reload()
+			return
+
+		// Somehow this operator is busy with order now
+		case err.Error() == proto.ForbiddenError:
+			log.Error(SendMessage(s.Dest(), M("you are not allowed to change accout rigth now"), nil))
+			// Reload for actual state
+			s.Reload()
+			return
+
+		default:
 			log.Errorf("failed to set lb key for chat %v: %v", s.Operator.TelegramChat, err)
 			s.ChangeState(State_Unavailable)
 			return
 		}
-
-		s.Operator = op
-		s.ChangeState(State_Start)
 	}
 }
 

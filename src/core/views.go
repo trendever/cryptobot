@@ -160,16 +160,10 @@ func SetOperatorKey(req proto.SetOperatorKeyRequest) (proto.Operator, error) {
 		}
 
 	case err.Error() == "record not found":
-		op.Username = acc.Username
-		op.Deposit = decimal.Zero
-		op.TelegramChat = req.ChatID
-		op.Status = proto.OperatorStatus_Inactive
-		op.Key = req.Key
-		err = tx.Create(&op).Error
+		err = createAccount(tx, acc.Username, &req)
 		if err != nil {
-			log.Errorf("failed to save operator %v: %v", op.ID, err)
 			tx.Rollback()
-			return proto.Operator{}, errors.New(proto.DBError)
+			return proto.Operator{}, err
 		}
 
 	default:
@@ -185,6 +179,47 @@ func SetOperatorKey(req proto.SetOperatorKeyRequest) (proto.Operator, error) {
 	}
 
 	return op.Encode(), nil
+}
+
+func createAccount(tx *gorm.DB, username string, req *proto.SetOperatorKeyRequest) error {
+	oldOp := Operator{TelegramChat: req.ChatID}
+	err := oldOp.LockLoad(tx)
+	switch {
+	case err == nil:
+		if oldOp.Status == proto.OperatorStatus_Busy {
+			log.Errorf("operator with chat %v(%v) tried to change lb account while was busy with order", req.ChatID, oldOp.Username)
+			return errors.New(proto.ForbiddenError)
+		}
+
+		err := tx.Model(&oldOp).Updates(map[string]interface{}{
+			"telegram_chat": gorm.Expr("NULL"),
+			"status":        proto.OperatorStatus_None,
+		}).Error
+		if err != nil {
+			log.Errorf("failed o detach old account on relink: %v", err)
+			return errors.New(proto.DBError)
+		}
+
+	case err.Error() == "record not found":
+
+	default:
+		log.Errorf("failed to load old operator: %v", err)
+		return errors.New(proto.DBError)
+	}
+
+	op := Operator{
+		Username:     username,
+		Deposit:      decimal.Zero,
+		TelegramChat: req.ChatID,
+		Status:       proto.OperatorStatus_Inactive,
+		Key:          req.Key,
+	}
+	err = tx.Create(&op).Error
+	if err != nil {
+		log.Errorf("failed to save operator %v: %v", op.Username, err)
+		return errors.New(proto.DBError)
+	}
+	return nil
 }
 
 func relinkAccount(tx *gorm.DB, op *Operator, req *proto.SetOperatorKeyRequest) error {
@@ -209,7 +244,7 @@ func relinkAccount(tx *gorm.DB, op *Operator, req *proto.SetOperatorKeyRequest) 
 	case err == nil:
 		if oldOp.Status == proto.OperatorStatus_Busy {
 			log.Errorf("operator with chat %v(%v) tried to change lb account while was busy with order", req.ChatID, oldOp.Username)
-			return errors.New("forbidden")
+			return errors.New(proto.ForbiddenError)
 		}
 
 		err := tx.Model(&oldOp).Updates(map[string]interface{}{
