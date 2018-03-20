@@ -329,7 +329,7 @@ func CreateOrder(req proto.Order) (proto.Order, error) {
 		return proto.Order{}, errors.New(proto.DBError)
 	}
 
-	manager.PushOrder(order)
+	manager.PushOrder(order.ID)
 
 	return order.Encode(), nil
 }

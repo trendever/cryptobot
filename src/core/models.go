@@ -8,6 +8,7 @@ import (
 	"github.com/jinzhu/gorm"
 	"github.com/shopspring/decimal"
 	"lbapi"
+	"time"
 )
 
 func init() {
@@ -108,6 +109,11 @@ type Order struct {
 	BotFee      decimal.Decimal `gorm:"type:decimal"`
 	Status      proto.OrderStatus
 	OperatorID  uint64
+
+	PaymentRequestedAt time.Time
+	// According to client
+	MarkedPayedAt time.Time
+	ConfirmedAt   time.Time
 }
 
 func (order *Order) LockLoad(tx *gorm.DB) error {
@@ -127,7 +133,7 @@ func (order *Order) Save(db *gorm.DB) error {
 		return err
 	}
 
-	err = rabbit.Publish("order_event", "", order)
+	err = rabbit.Publish("order_event", "", order.Encode())
 	if err != nil {
 		log.Errorf("failed to send order event: %v", err)
 		// Still saved, so it kind of success

@@ -126,21 +126,27 @@ const (
 	OrderStatus_Transfer OrderStatus = 11
 	// Finished
 	OrderStatus_Finished OrderStatus = 12
+	// Payment was not confirmed in time, but operator did not drop order yet
+	OrderStatus_ConfirmationExtended OrderStatus = 13
+	// Payment was not confirmed in time and operator dropped order
+	OrderStatus_Unconfirmed OrderStatus = 14
 )
 
 var OrderStatusStrings = map[OrderStatus]string{
-	OrderStatus_New:          "new",
-	OrderStatus_Unrealizable: "unrealizable",
-	OrderStatus_Rejected:     "rejected",
-	OrderStatus_Accepted:     "accepted",
-	OrderStatus_Dropped:      "dropped",
-	OrderStatus_Linked:       "linked",
-	OrderStatus_Payment:      "payment",
-	OrderStatus_Canceled:     "canceled",
-	OrderStatus_Timeout:      "timeout",
-	OrderStatus_Confirmation: "confirmation",
-	OrderStatus_Transfer:     "transfer",
-	OrderStatus_Finished:     "finished",
+	OrderStatus_New:                  "new",
+	OrderStatus_Unrealizable:         "unrealizable",
+	OrderStatus_Rejected:             "rejected",
+	OrderStatus_Accepted:             "accepted",
+	OrderStatus_Dropped:              "dropped",
+	OrderStatus_Linked:               "linked",
+	OrderStatus_Payment:              "payment",
+	OrderStatus_Canceled:             "canceled",
+	OrderStatus_Timeout:              "timeout",
+	OrderStatus_Confirmation:         "confirmation",
+	OrderStatus_Transfer:             "transfer",
+	OrderStatus_Finished:             "finished",
+	OrderStatus_ConfirmationExtended: "extended",
+	OrderStatus_Unconfirmed:          "unconfirmed",
 }
 
 func (s OrderStatus) String() string {

@@ -13,7 +13,7 @@ import (
 )
 
 func LBTransactionsLoop() {
-	for range time.Tick(conf.lbCheckTick) {
+	for range time.Tick(conf.LBCheckTick) {
 		wallet, err := conf.LBKey.Wallet()
 		if err != nil {
 			log.Error(err)

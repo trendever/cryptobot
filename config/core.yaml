@@ -2,10 +2,10 @@ lbKey:
   public: 0822f83228750e27d4264972fa87e9a4
   secret: 33b369d011d695540cd8b424c9aa4ea62c04ddce7800eb952ebeb822a20ec0cc
 
-telegramChanel: @tl_crypto_notify
+telegramChanel: '@tl_crypto_notify'
 
 debug: true
-dumpQueries: true
+#dumpQueries: true
 
 qorAddress: ":8777"
 
@@ -13,11 +13,16 @@ proxy: ""
 sentryDNS: ""
 
 lbCheckTick: 30s
+ordersUpdateTick: 10s
 
 ratesRefreshTick: 10m
 prefetchRates:
     - RUB
-    - USD
+
+orderTimeouts:
+    accept: 1m
+    payment: 5m
+    confirm: 5m
 
 db:
   debug:    true

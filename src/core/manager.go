@@ -12,11 +12,8 @@ import (
 	"time"
 )
 
-const AcceptTimeout = 3 * time.Minute
-
 type orderManager struct {
-	waiters   []Order
-	orders    chan Order
+	orders    chan uint64
 	operators chan Operator
 	accepts   chan accept
 }
@@ -33,70 +30,53 @@ type accept struct {
 }
 
 var manager = orderManager{
-	waiters:   make([]Order, 0),
-	orders:    make(chan Order),
+	orders:    make(chan uint64),
 	operators: make(chan Operator),
 	accepts:   make(chan accept),
 }
 
 func StartOrderManager() {
+	// load list of new orders and push it to manager
+	go func() {
+		var orders []Order
+		err := db.New().Find(&orders, "status = ?", proto.OrderStatus_New).Error
+		if err != nil {
+			log.Errorf("failed to load list of orders: %v", err)
+			return
+		}
+		timer := time.NewTimer(conf.OrderTimeouts.Accept)
+		for _, order := range orders {
+			select {
+			case <-timer.C:
+				return
+			case manager.orders <- order.ID:
+
+			}
+		}
+	}()
 	go manager.loop()
 }
 
 func (man *orderManager) loop() {
-	db.New().Find(&man.waiters, "status = ?", proto.OrderStatus_New)
-	timer := time.NewTimer(time.Second)
+	ticker := time.NewTicker(conf.OrdersUpdateTick)
 
 	for {
 		select {
-		case <-timer.C:
-			now := time.Now()
-			for i, order := range man.waiters {
-				if now.Sub(order.CreatedAt) < AcceptTimeout {
-					man.waiters = man.waiters[i:]
-					break
-				}
-				err := RejectOrder(order)
-				if err != nil {
-					log.Errorf("failed to reject expired order: %v", err)
-					man.waiters = man.waiters[i:]
-					break
-				}
-			}
-			if len(man.waiters) != 0 {
-				timer.Reset(now.Sub(man.waiters[0].CreatedAt) + AcceptTimeout)
-			}
+		case <-ticker.C:
+			man.tickUpdate()
 
-		case order := <-man.orders:
-			var ops []Operator
-			err := db.New().Find(&ops, "status = ?", proto.OperatorStatus_Ready).Error
-			if err != nil {
-				log.Errorf("failed to load list of ready operators: %v", err)
-				continue
-			}
-			for _, op := range ops {
-				if op.Deposit.Cmp(order.LBAmount) >= 0 {
-					err := OfferOrder(op, order)
-					if err != nil {
-						log.Errorf("failed to send offer to %v: %v", op.ID, err)
-					}
-				} else {
-					go NotifyLackOfDeposit(op, order.LBAmount)
-				}
-			}
-			man.waiters = append(man.waiters, order)
-			if len(man.waiters) == 1 {
-				timer.Stop()
-				select {
-				case <-timer.C:
-				default:
-				}
-				timer.Reset(AcceptTimeout)
-			}
+		case orderID := <-man.orders:
+			man.onOrderReceive(orderID)
 
 		case op := <-man.operators:
+			var orders []Order
+			err := db.New().Find(&orders, "status = ?", proto.OrderStatus_New).Error
+			if err != nil {
+				log.Errorf("failed to load list of orders: %v", err)
+				continue
+			}
 			var lacked decimal.Decimal
-			for _, order := range man.waiters {
+			for _, order := range orders {
 				if op.Deposit.Cmp(order.LBAmount) > 0 {
 					// This order was skipped by operator already
 					if op.CurrentOrder >= order.ID {
@@ -121,8 +101,98 @@ func (man *orderManager) loop() {
 	}
 }
 
-func (man *orderManager) PushOrder(order Order) {
-	man.orders <- order
+func (man *orderManager) onOrderReceive(orderID uint64) {
+	requeue := func(orderID uint64) {
+		timer := time.NewTimer(conf.OrderTimeouts.Accept)
+		time.Sleep(5 * time.Second)
+		select {
+		case <-timer.C:
+			return
+		case manager.orders <- orderID:
+
+		}
+	}
+
+	var order Order
+	err := db.New().First(&order, orderID).Error
+	switch {
+	case err == nil:
+
+	case err.Error() == "record not found":
+		return
+
+	default:
+		log.Errorf("failed to load order: %v", err)
+		go requeue(orderID)
+	}
+
+	if order.Status != proto.OrderStatus_New {
+		return
+	}
+
+	var ops []Operator
+	err = db.New().Find(&ops, "status = ?", proto.OperatorStatus_Ready).Error
+	if err != nil {
+		log.Errorf("failed to load list of ready operators: %v", err)
+		return
+	}
+
+	for _, op := range ops {
+		if op.Deposit.Cmp(order.LBAmount) >= 0 {
+			err := OfferOrder(op, order)
+			if err != nil {
+				log.Errorf("failed to send offer to %v: %v", op.ID, err)
+				go requeue(orderID)
+			}
+		} else {
+			go NotifyLackOfDeposit(op, order.LBAmount)
+		}
+	}
+}
+
+func (man *orderManager) tickUpdate() {
+	var orders []Order
+	now := time.Now()
+	touts := conf.OrderTimeouts
+
+	err := db.New().
+		Or("status = ? and created_at < ?", proto.OrderStatus_New, now.Truncate(touts.Accept)).
+		Or("status = ? and payment_requested_at < ?", proto.OrderStatus_Payment, now.Truncate(touts.Payment)).
+		Or("status = ? and marked_payed_at < ?", proto.OrderStatus_Confirmation, now.Truncate(touts.Confirm)).
+		Find(&orders).Error
+
+	if err != nil {
+		log.Errorf("failed to find orders for update: %v", err)
+		return
+	}
+
+	for _, order := range orders {
+		switch order.Status {
+		case proto.OrderStatus_New:
+			err := rejectOrder(order.ID)
+			if err != nil {
+				log.Errorf("failed to reject order %v: %v", order.ID, err)
+			}
+
+		case proto.OrderStatus_Payment:
+			err := timeoutOrder(order.ID)
+			if err != nil {
+				log.Errorf("failed to set order %v status to timeout: %v", order.ID, err)
+			}
+
+		case proto.OrderStatus_Confirmation:
+			err := extendConfirmation(order.ID)
+			if err != nil {
+				log.Errorf("failed to set order %v status to confirmation extended: %v", order.ID, err)
+			}
+		default:
+			log.Fatalf("unreachable point")
+		}
+	}
+}
+
+func (man *orderManager) PushOrder(orderID uint64) {
+	man.orders <- orderID
 }
 
 func (man *orderManager) PushOperator(op Operator) {
@@ -141,79 +211,80 @@ func (man *orderManager) AcceptOffer(operatorID, orderID uint64) (Order, error) 
 }
 
 func (man *orderManager) acceptOrder(accept accept) {
-	var (
-		i     int
-		order Order
-	)
-	for i, order = range man.waiters {
-		if order.ID == accept.orderID {
-			break
+	tx := db.NewTransaction()
+	order, err := LockLoadOrderByID(tx, accept.orderID)
+	if err != nil {
+		tx.Rollback()
+		log.Errorf("failed to load order: %v", err)
+		accept.reply <- acceptReply{
+			err: errors.New(proto.DBError),
 		}
+		return
 	}
-	// Order was taken by someone else or rejected on timeout already
-	if order.ID == 0 {
+
+	if order.Status != proto.OrderStatus_New {
+		tx.Rollback()
 		accept.reply <- acceptReply{
 			err: errors.New("order unaviable"),
 		}
 		return
 	}
 
-	tx := db.NewTransaction()
 	op, err := LockLoadOperatorByID(tx, accept.operatorID)
 	switch {
 	case err == nil:
 
 	case err.Error() == "record not found":
+		tx.Rollback()
 		log.Errorf("unknown operator id %v in order accept", accept.operatorID)
 		accept.reply <- acceptReply{
 			err: errors.New("unknown operator"),
 		}
-		tx.Rollback()
 		return
 
 	default:
+		tx.Rollback()
 		log.Errorf("failed to load operator %v: %v", accept.operatorID, err)
 		accept.reply <- acceptReply{
 			err: errors.New(proto.DBError),
 		}
-		tx.Rollback()
 		return
 	}
 
 	if op.Deposit.Cmp(order.LBAmount) < 0 {
+		tx.Rollback()
 		log.Errorf("operator %v tried to accept order %v but do not have enough on deposit", accept.operatorID, order.ID)
 		accept.reply <- acceptReply{
 			err: errors.New("lack of deposit"),
 		}
-		tx.Rollback()
 		return
 	}
 
 	if op.Status != proto.OperatorStatus_Proposal {
+		tx.Rollback()
 		log.Errorf("operator %v tried to accept order %v but had unexpected status %v", accept.operatorID, order.ID, op.Status)
 		accept.reply <- acceptReply{
 			err: errors.New("unexpected status"),
 		}
-		tx.Rollback()
 		return
 	}
 
 	if op.CurrentOrder != accept.orderID {
+		tx.Rollback()
 		log.Errorf("operator %v tried to accept order %v while his current order was %v", accept.operatorID, order.ID, op.CurrentOrder)
 		accept.reply <- acceptReply{
 			err: errors.New("unexpected status"),
 		}
-		tx.Rollback()
 		return
 	}
 
 	err = tx.Model(&op).Update("status", proto.OperatorStatus_Busy).Error
 	if err != nil {
+		tx.Rollback()
 		log.Errorf("failed to save operator: %v", err)
 		accept.reply <- acceptReply{
 			err: errors.New("db error"),
 		}
-		tx.Rollback()
 		return
 	}
 
@@ -221,10 +292,10 @@ func (man *orderManager) acceptOrder(accept accept) {
 	order.Status = proto.OrderStatus_Accepted
 	err = order.Save(tx)
 	if err != nil {
+		tx.Rollback()
 		accept.reply <- acceptReply{
 			err: errors.New("db error"),
 		}
-		tx.Rollback()
 		return
 	}
 
@@ -240,7 +311,6 @@ func (man *orderManager) acceptOrder(accept accept) {
 	accept.reply <- acceptReply{
 		order: order,
 	}
-	man.waiters = append(man.waiters[:i], man.waiters[i+1:]...)
 }
 
 func OfferOrder(op Operator, order Order) error {
@@ -274,13 +344,24 @@ func OfferOrder(op Operator, order Order) error {
 	return tx.Commit().Error
 }
 
-func RejectOrder(order Order) error {
+func rejectOrder(orderID uint64) error {
 	tx := db.NewTransaction()
-	var ops []Operator
-	err := tx.Find(&ops, "current_order = ?", order.ID).Error
+
+	order, err := LockLoadOrderByID(tx, orderID)
 	if err != nil {
 		tx.Rollback()
-		return err
+		return fmt.Errorf("failed to load order: %v", err)
+	}
+	if order.Status != proto.OrderStatus_New {
+		tx.Commit()
+		return nil
+	}
+
+	var ops []Operator
+	err = tx.Set("gorm:query_option", "FOR UPDATE").Find(&ops, "current_order = ?", order.ID).Error
+	if err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to load related operators: %v", err)
 	}
 	for _, op := range ops {
 		err := tx.Model(&op).Updates(map[string]interface{}{
@@ -289,7 +370,7 @@ func RejectOrder(order Order) error {
 		}).Error
 		if err != nil {
 			tx.Rollback()
-			return err
+			return fmt.Errorf("failed to withdraw order from operator: %v", err)
 		}
 	}
 
@@ -297,7 +378,66 @@ func RejectOrder(order Order) error {
 	err = order.Save(tx)
 	if err != nil {
 		tx.Rollback()
-		return err
+		return fmt.Errorf("failed to save order: %v", err)
+	}
+	return tx.Commit().Error
+}
+
+func timeoutOrder(orderID uint64) error {
+	tx := db.NewTransaction()
+
+	order, err := LockLoadOrderByID(tx, orderID)
+	if err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to load order: %v", err)
+	}
+	if order.Status != proto.OrderStatus_Payment {
+		tx.Commit()
+		return nil
+	}
+
+	op, err := LockLoadOperatorByID(tx, order.OperatorID)
+	if err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to load operator: %v", err)
+	}
+	err = tx.Model(&op).Updates(map[string]interface{}{
+		"status":        proto.OperatorStatus_Ready,
+		"current_order": 0,
+	}).Error
+	if err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to withdraw order from operator: %v", err)
+	}
+
+	order.Status = proto.OrderStatus_Timeout
+	err = order.Save(tx)
+	if err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to save order: %v", err)
+	}
+	return tx.Commit().Error
+}
+
+func extendConfirmation(orderID uint64) error {
+	tx := db.NewTransaction()
+
+	order, err := LockLoadOrderByID(tx, orderID)
+	if err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to load order: %v", err)
+	}
+	if order.Status != proto.OrderStatus_Confirmation {
+		tx.Commit()
+		return nil
+	}
+
+	order.Status = proto.OrderStatus_ConfirmationExtended
+	order.Status = proto.OrderStatus_Timeout
+	err = order.Save(tx)
+	if err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to save order: %v", err)
 	}
 	return tx.Commit().Error
 }
