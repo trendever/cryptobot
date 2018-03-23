@@ -115,6 +115,7 @@ func Listen() {
 				session.PushMessage(message)
 			}
 		case event := <-global.events:
+			log.Debug("event: %+v", event)
 			var session *Session
 			switch {
 			case event.OperatorID != 0:

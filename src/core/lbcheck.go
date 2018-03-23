@@ -83,7 +83,7 @@ func ProcessIncomingTx(event lbapi.Transaction) error {
 		return err
 	}
 	if op.Status == proto.OperatorStatus_Ready {
-		manager.PushOperator(op)
+		manager.PushOperator(op.ID, true)
 	}
 
 	go func() {

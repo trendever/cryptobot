@@ -114,9 +114,6 @@ func SetOperatorStatus(req proto.SetOperatorStatusRequest) (bool, error) {
 		return false, errors.New("operator is busy")
 	}
 	op.Status = req.Status
-	if op.Status == proto.OperatorStatus_Proposal {
-		op.CurrentOrder = 0
-	}
 	err = op.Save(tx)
 	if err != nil {
 		log.Errorf("failed to update operator status: %v", err)
@@ -125,7 +122,7 @@ func SetOperatorStatus(req proto.SetOperatorStatusRequest) (bool, error) {
 	}
 
 	if req.Status == proto.OperatorStatus_Ready {
-		manager.PushOperator(op)
+		manager.PushOperator(op.ID, false)
 	}
 
 	err = tx.Commit().Error
@@ -382,7 +379,7 @@ func SkipOffer(req proto.SkipOfferRequest) (bool, error) {
 		return false, errors.New(proto.DBError)
 	}
 
-	manager.PushOperator(op)
+	manager.PushOperator(op.ID, false)
 	return true, nil
 }
 

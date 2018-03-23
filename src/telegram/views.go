@@ -9,13 +9,20 @@ import (
 )
 
 func init() {
-	rabbit.ServeRPC(proto.SendOffer, SendOfferHandler)
 	rabbit.Subscribe(rabbit.Subscription{
 		Name:           "order_event",
 		Routes:         []rabbit.Route{core.OrderEventRoute},
 		AutoAck:        true,
 		Prefetch:       10,
 		DecodedHandler: OrderEventHandler,
+	})
+
+	rabbit.Subscribe(rabbit.Subscription{
+		Name:           "offer_event",
+		Routes:         []rabbit.Route{proto.OfferEventRoute},
+		AutoAck:        true,
+		Prefetch:       10,
+		DecodedHandler: OfferEventHandler,
 	})
 
 	rabbit.Subscribe(
@@ -41,16 +48,23 @@ func SendNotifyHandler(notify proto.SendNotifyMessage) bool {
 	return true
 }
 
-func SendOfferHandler(req proto.SendOfferRequest) (bool, error) {
-	global.events <- event{
-		ChatID: req.ChatID,
-		Data:   req.Order,
+func OfferEventHandler(e proto.OfferEvent) bool {
+	log.Debug("offer event: %+v", e)
+	for _, chat := range e.Chats {
+		global.events <- event{
+			ChatID: chat,
+			Data:   e.Order,
+		}
 	}
-	return true, nil
+	return true
 }
 
 func OrderEventHandler(order core.Order) bool {
 	log.Debug("order event: %+v", order)
+	if order.OperatorID == 0 {
+		// Ignore such events
+		return true
+	}
 	global.events <- event{
 		OperatorID: order.OperatorID,
 		Data:       order,

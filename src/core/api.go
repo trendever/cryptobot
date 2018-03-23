@@ -5,11 +5,7 @@ import (
 	"telegram/proto"
 )
 
-var SendOffer func(proto.SendOfferRequest) (bool, error)
-
 func init() {
-	rabbit.DeclareRPC(proto.SendOffer, &SendOffer)
-
 	rabbit.AddPublishers(
 		rabbit.Publisher{
 			Name:       "telegram_notify",

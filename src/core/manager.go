@@ -3,6 +3,7 @@ package main
 import (
 	"common/db"
 	"common/log"
+	"common/rabbit"
 	"core/proto"
 	"fmt"
 	"github.com/pkg/errors"
@@ -12,9 +13,17 @@ import (
 	"time"
 )
 
+func init() {
+	rabbit.AddPublishers(rabbit.Publisher{
+		Name:    "offer_event",
+		Routes:  []rabbit.Route{tg.OfferEventRoute},
+		Confirm: true,
+	})
+}
+
 type orderManager struct {
-	orders    chan uint64
-	operators chan Operator
+	orders    chan orderPush
+	operators chan opPush
 	accepts   chan accept
 }
 
@@ -29,9 +38,21 @@ type accept struct {
 	reply      chan acceptReply
 }
 
+type opPush struct {
+	id uint64
+	// recheck already skipped orders as well
+	anew bool
+}
+
+type orderPush struct {
+	id uint64
+	// notify lack of deposit
+	notify bool
+}
+
 var manager = orderManager{
-	orders:    make(chan uint64),
-	operators: make(chan Operator),
+	orders:    make(chan orderPush),
+	operators: make(chan opPush),
 	accepts:   make(chan accept),
 }
 
@@ -49,7 +70,10 @@ func StartOrderManager() {
 			select {
 			case <-timer.C:
 				return
-			case manager.orders <- order.ID:
+			case manager.orders <- orderPush{
+				id:     order.ID,
+				notify: false,
+			}:
 
 			}
 		}
@@ -65,35 +89,11 @@ func (man *orderManager) loop() {
 		case <-ticker.C:
 			man.tickUpdate()
 
-		case orderID := <-man.orders:
-			man.onOrderReceive(orderID)
+		case push := <-man.orders:
+			man.onOrderReceive(push)
 
-		case op := <-man.operators:
-			var orders []Order
-			err := db.New().Find(&orders, "status = ?", proto.OrderStatus_New).Error
-			if err != nil {
-				log.Errorf("failed to load list of orders: %v", err)
-				continue
-			}
-			var lacked decimal.Decimal
-			for _, order := range orders {
-				if op.Deposit.Cmp(order.LBAmount) > 0 {
-					// This order was skipped by operator already
-					if op.CurrentOrder >= order.ID {
-						continue
-					}
-					err := OfferOrder(op, order)
-					if err != nil {
-						log.Errorf("failed to send offer to %v: %v", op.ID, err)
-					}
-					break
-				} else {
-					lacked = order.LBAmount
-				}
-			}
-			if lacked.Sign() > 0 {
-				go NotifyLackOfDeposit(op, lacked)
-			}
+		case push := <-man.operators:
+			man.onOperatorReceive(push)
 
 		case accept := <-man.accepts:
 			man.acceptOrder(accept)
@@ -101,20 +101,20 @@ func (man *orderManager) loop() {
 	}
 }
 
-func (man *orderManager) onOrderReceive(orderID uint64) {
-	requeue := func(orderID uint64) {
+func (man *orderManager) onOperatorReceive(push opPush) {
+	requeue := func(push opPush) {
 		timer := time.NewTimer(conf.OrderTimeouts.Accept)
 		time.Sleep(5 * time.Second)
 		select {
 		case <-timer.C:
 			return
-		case manager.orders <- orderID:
+		case manager.operators <- push:
 
 		}
 	}
 
-	var order Order
-	err := db.New().First(&order, orderID).Error
+	tx := db.NewTransaction()
+	op, err := LockLoadOperatorByID(tx, push.id)
 	switch {
 	case err == nil:
 
@@ -122,31 +122,184 @@ func (man *orderManager) onOrderReceive(orderID uint64) {
 		return
 
 	default:
+		tx.Rollback()
+		log.Errorf("failed to load operator: %v", err)
+		go requeue(push)
+		return
+	}
+
+	var orders []Order
+	scope := tx.Order("id").Where("status = ?", proto.OrderStatus_New)
+	if !push.anew {
+		scope = scope.Where("id > ?", op.CurrentOrder)
+	}
+	err = scope.Find(&orders).Error
+	if err != nil {
+		tx.Rollback()
+		log.Errorf("failed to load list of orders: %v", err)
+		go requeue(push)
+		return
+	}
+
+	if len(orders) == 0 {
+		tx.Commit()
+		return
+	}
+
+	for _, order := range orders {
+		if op.Deposit.Cmp(order.LBAmount) > 0 {
+			op.CurrentOrder = order.ID
+			op.Status = proto.OperatorStatus_Proposal
+			err := op.Save(tx)
+			if err != nil {
+				tx.Rollback()
+				log.Errorf("failed to save operator: %v", err)
+				go requeue(push)
+				return
+			}
+
+			err = rabbit.Publish("offer_event", "", tg.OfferEvent{
+				Chats: []int64{op.TelegramChat},
+				Order: order.Encode(),
+			})
+			if err != nil {
+				tx.Rollback()
+				log.Errorf("failed to send offer to %v: %v", op.ID, err)
+				go requeue(push)
+				return
+			}
+
+			err = tx.Commit().Error
+			if err != nil {
+				log.Errorf("failed to commit in onOperatorReceive: %v", err)
+				go requeue(push)
+				return
+			}
+			return
+		} else {
+			// @TODO it can be kinda spammy. Combine notifies?
+			go NotifyLackOfDeposit(op.TelegramChat, order.LBAmount)
+		}
+	}
+
+	op.CurrentOrder = orders[len(orders)-1].ID
+	err = op.Save(tx)
+	if err != nil {
+		tx.Rollback()
+		log.Errorf("failed to save operator: %v", err)
+		go requeue(push)
+		return
+	}
+
+	tx.Commit()
+}
+
+func (man *orderManager) onOrderReceive(push orderPush) {
+	requeue := func(id uint64, notify bool) {
+		timer := time.NewTimer(conf.OrderTimeouts.Accept)
+		time.Sleep(5 * time.Second)
+		select {
+		case <-timer.C:
+			return
+		case manager.orders <- orderPush{
+			id:     id,
+			notify: notify,
+		}:
+
+		}
+	}
+
+	tx := db.NewTransaction()
+
+	order, err := LockLoadOrderByID(tx, push.id)
+	switch {
+	case err == nil:
+
+	case err.Error() == "record not found":
+		tx.Rollback()
+		return
+
+	default:
+		tx.Rollback()
 		log.Errorf("failed to load order: %v", err)
-		go requeue(orderID)
+		go requeue(push.id, true)
+		return
 	}
 
 	if order.Status != proto.OrderStatus_New {
+		tx.Rollback()
 		return
 	}
 
 	var ops []Operator
-	err = db.New().Find(&ops, "status = ?", proto.OperatorStatus_Ready).Error
+	err = tx.Set("gorm:query_option", "FOR UPDATE").Find(&ops, "status = ? AND current_order < ?", proto.OperatorStatus_Ready, push.id).Error
 	if err != nil {
+		tx.Rollback()
 		log.Errorf("failed to load list of ready operators: %v", err)
+		go requeue(push.id, true)
 		return
 	}
 
+	var offer_ids, lack_ids []uint64
+	var offer_chats, lack_chats []int64
 	for _, op := range ops {
 		if op.Deposit.Cmp(order.LBAmount) >= 0 {
-			err := OfferOrder(op, order)
-			if err != nil {
-				log.Errorf("failed to send offer to %v: %v", op.ID, err)
-				go requeue(orderID)
-			}
-		} else {
-			go NotifyLackOfDeposit(op, order.LBAmount)
+			offer_ids = append(offer_ids, op.ID)
+			offer_chats = append(offer_chats, op.TelegramChat)
+		} else if push.notify {
+			lack_ids = append(lack_ids, op.ID)
+			lack_chats = append(lack_chats, op.TelegramChat)
 		}
+	}
+
+	err = tx.Model(&Operator{}).Where("id in (?)", offer_ids).Updates(map[string]interface{}{
+		"status":        proto.OperatorStatus_Proposal,
+		"current_order": order.ID,
+	}).Error
+	if err != nil {
+		tx.Rollback()
+		log.Errorf("failed update operators: %v", err)
+		go requeue(push.id, true)
+		return
+	}
+
+	err = tx.Model(&Operator{}).Where("id in (?)", lack_ids).Updates(map[string]interface{}{
+		"current_order": order.ID,
+	}).Error
+	if err != nil {
+		tx.Rollback()
+		log.Errorf("failed update operators: %v", err)
+		go requeue(push.id, true)
+		return
+	}
+
+	if len(offer_ids) == 0 {
+		tx.Commit()
+		go requeue(push.id, false)
+		go func() {
+			for _, chat := range lack_chats {
+				NotifyLackOfDeposit(chat, order.LBAmount)
+			}
+		}()
+		return
+	}
+
+	err = rabbit.Publish("offer_event", "", tg.OfferEvent{
+		Chats: offer_chats,
+		Order: order.Encode(),
+	})
+	if err != nil {
+		tx.Rollback()
+		log.Errorf("failed to send offer event: %v", err)
+		go requeue(push.id, false)
+		return
+	}
+
+	err = tx.Commit().Error
+	if err != nil {
+		log.Errorf("failed update operators: %v", err)
+		go requeue(push.id, false)
+		return
 	}
 }
 
@@ -192,11 +345,17 @@ func (man *orderManager) tickUpdate() {
 }
 
 func (man *orderManager) PushOrder(orderID uint64) {
-	man.orders <- orderID
+	man.orders <- orderPush{
+		id:     orderID,
+		notify: true,
+	}
 }
 
-func (man *orderManager) PushOperator(op Operator) {
-	man.operators <- op
+func (man *orderManager) PushOperator(opID uint64, anew bool) {
+	man.operators <- opPush{
+		id:   opID,
+		anew: anew,
+	}
 }
 
 func (man *orderManager) AcceptOffer(operatorID, orderID uint64) (Order, error) {
@@ -288,6 +447,35 @@ func (man *orderManager) acceptOrder(accept accept) {
 		return
 	}
 
+	var ops []Operator
+	err = tx.Set("gorm:query_option", "FOR UPDATE").Find(&ops, "current_order = ? AND id != ?", order.ID, op.ID).Error
+	if err != nil {
+		tx.Rollback()
+		accept.reply <- acceptReply{
+			err: errors.New("db error"),
+		}
+		log.Errorf("failed to load related operators: %v", err)
+		return
+	}
+	var ids []uint64
+	var chats []int64
+	for _, op := range ops {
+		ids = append(ids, op.ID)
+		chats = append(chats, op.TelegramChat)
+	}
+
+	err = tx.Model(&Operator{}).Where("id in (?)", ids).Updates(map[string]interface{}{
+		"status": proto.OperatorStatus_Ready,
+	}).Error
+	if err != nil {
+		tx.Rollback()
+		accept.reply <- acceptReply{
+			err: errors.New("db error"),
+		}
+		log.Errorf("failed to withdraw order from operators: %v", err)
+		return
+	}
+
 	order.OperatorID = op.ID
 	order.Status = proto.OrderStatus_Accepted
 	err = order.Save(tx)
@@ -297,6 +485,14 @@ func (man *orderManager) acceptOrder(accept accept) {
 			err: errors.New("db error"),
 		}
 		return
+	}
+
+	err = rabbit.Publish("offer_event", "", tg.OfferEvent{
+		Chats: chats,
+		Order: order.Encode(),
+	})
+	if err != nil {
+		log.Errorf("failed to send reject offer event: %v", err)
 	}
 
 	err = tx.Commit().Error
@@ -311,37 +507,6 @@ func (man *orderManager) acceptOrder(accept accept) {
 	accept.reply <- acceptReply{
 		order: order,
 	}
-}
-
-func OfferOrder(op Operator, order Order) error {
-	tx := db.NewTransaction()
-	err := op.LockLoad(tx)
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
-	if op.Status != proto.OperatorStatus_Ready {
-		tx.Rollback()
-		return nil
-	}
-
-	_, err = SendOffer(tg.SendOfferRequest{
-		ChatID: op.TelegramChat,
-		Order:  order.Encode(),
-	})
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
-	err = tx.Model(op).Updates(map[string]interface{}{
-		"status":        proto.OperatorStatus_Proposal,
-		"current_order": order.ID,
-	}).Error
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
-	return tx.Commit().Error
 }
 
 func rejectOrder(orderID uint64) error {
@@ -363,15 +528,20 @@ func rejectOrder(orderID uint64) error {
 		tx.Rollback()
 		return fmt.Errorf("failed to load related operators: %v", err)
 	}
+
+	var ids []uint64
+	var chats []int64
 	for _, op := range ops {
-		err := tx.Model(&op).Updates(map[string]interface{}{
-			"status":        proto.OperatorStatus_Ready,
-			"current_order": 0,
-		}).Error
-		if err != nil {
-			tx.Rollback()
-			return fmt.Errorf("failed to withdraw order from operator: %v", err)
-		}
+		ids = append(ids, op.ID)
+		chats = append(chats, op.TelegramChat)
+	}
+
+	err = tx.Model(&Operator{}).Where("id in (?)", ids).Updates(map[string]interface{}{
+		"status": proto.OperatorStatus_Ready,
+	}).Error
+	if err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to withdraw order from operators: %v", err)
 	}
 
 	order.Status = proto.OrderStatus_Rejected
@@ -380,6 +550,15 @@ func rejectOrder(orderID uint64) error {
 		tx.Rollback()
 		return fmt.Errorf("failed to save order: %v", err)
 	}
+
+	err = rabbit.Publish("offer_event", "", tg.OfferEvent{
+		Chats: chats,
+		Order: order.Encode(),
+	})
+	if err != nil {
+		log.Errorf("failed to send reject offer event: %v", err)
+	}
+
 	return tx.Commit().Error
 }
 
@@ -442,9 +621,9 @@ func extendConfirmation(orderID uint64) error {
 	return tx.Commit().Error
 }
 
-func NotifyLackOfDeposit(op Operator, required decimal.Decimal) {
-	err := SendTelegramNotify(strconv.FormatInt(op.TelegramChat, 10), fmt.Sprintf(
-		M("order for an BTC amount %v was skipped due lack of your deposit(have %v)"), required, op.Deposit,
+func NotifyLackOfDeposit(chat int64, required decimal.Decimal) {
+	err := SendTelegramNotify(strconv.FormatInt(chat, 10), fmt.Sprintf(
+		M("order for an BTC amount %v was skipped due lack of your deposit"), required,
 	), false)
 	if err != nil {
 		log.Errorf("failed to send lack of deposit notify: %v", err)
