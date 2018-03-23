@@ -616,7 +616,6 @@ func extendConfirmation(orderID uint64) error {
 	}
 
 	order.Status = proto.OrderStatus_ConfirmationExtended
-	order.Status = proto.OrderStatus_Timeout
 	err = order.Save(tx)
 	if err != nil {
 		tx.Rollback()

@@ -359,10 +359,16 @@ func serveOrderStateEnter(s *Session) {
 		), Keyboard(M("confirm"), M("drop"))))
 
 	case proto.OrderStatus_Payment:
-		log.Error(SendMessage(s.Dest(), "wait for payment", Keyboard()))
+		log.Error(SendMessage(s.Dest(), "wait for payment", Keyboard("...")))
 
 	case proto.OrderStatus_Confirmation:
 		log.Error(SendMessage(s.Dest(), M("client marked order as payed"), Keyboard(M("confirm"))))
+
+	case proto.OrderStatus_ConfirmationExtended:
+		log.Error(SendMessage(s.Dest(),
+			M("confirmation timeout is exceeded, you can drop order now"),
+			Keyboard(M("confirm"), M("drop")),
+		))
 	}
 }
 
@@ -408,6 +414,16 @@ func serveOrderStateEvent(s *Session, event interface{}) {
 	case proto.OrderStatus_Confirmation:
 		log.Error(SendMessage(s.Dest(), M("client marked order as payed"), Keyboard(M("confirm"))))
 		s.context = order
+
+	case proto.OrderStatus_ConfirmationExtended:
+		log.Error(SendMessage(s.Dest(),
+			M("confirmation timeout is exceeded, you can drop order now"),
+			Keyboard(M("confirm"), M("drop")),
+		))
+		s.context = order
+
+	case proto.OrderStatus_Unconfirmed:
+		s.ChangeState(State_WaitForOrders)
 
 	case proto.OrderStatus_Transfer, proto.OrderStatus_Finished:
 		amount := order.LBAmount.Sub(order.LBFee).Sub(order.OperatorFee)
@@ -456,8 +472,8 @@ func serveOrderStateMessage(s *Session, msg *telebot.Message) {
 			s.ChangeState(State_Unavailable)
 			return
 		}
-		// @TODO send something?
-		s.ChangeState(State_Start)
+		log.Error(SendMessage(s.Dest(), M("order was dropped"), Keyboard("...")))
+		s.ChangeState(State_WaitForOrders)
 		return
 	}
 	switch order.Status {
@@ -469,7 +485,7 @@ func serveOrderStateMessage(s *Session, msg *telebot.Message) {
 				return
 			}
 			s.context = order
-			log.Error(SendMessage(s.Dest(), M("wait for payment"), Keyboard()))
+			log.Error(SendMessage(s.Dest(), M("wait for payment"), Keyboard("...")))
 			return
 		}
 		fallthrough
@@ -498,7 +514,7 @@ func serveOrderStateMessage(s *Session, msg *telebot.Message) {
 		}
 
 	case proto.OrderStatus_Payment:
-		log.Error(SendMessage(s.Dest(), M("wait for payment"), Keyboard()))
+		log.Error(SendMessage(s.Dest(), M("wait for payment"), Keyboard("...")))
 
 	case proto.OrderStatus_Confirmation:
 		if msg.Text == M("confirm") {
@@ -507,10 +523,31 @@ func serveOrderStateMessage(s *Session, msg *telebot.Message) {
 				s.ChangeState(State_Unavailable)
 				return
 			}
-			log.Error(SendMessage(s.Dest(), M("wait for finish of transaction"), Keyboard()))
+			log.Error(SendMessage(s.Dest(), M("wait for finish of transaction"), Keyboard("...")))
 			return
 		}
 		log.Error(SendMessage(s.Dest(), M("client marked order as payed"), Keyboard(M("confirm"))))
+
+	case proto.OrderStatus_ConfirmationExtended:
+		switch msg.Text {
+		case M("confirm"):
+			_, err := ConfirmPayment(order.ID)
+			if err != nil {
+				s.ChangeState(State_Unavailable)
+				return
+			}
+			log.Error(SendMessage(s.Dest(), M("wait for finish of transaction"), Keyboard("...")))
+			return
+
+		// handled above
+		//case "drop":
+
+		default:
+			log.Error(SendMessage(s.Dest(),
+				M("confirmation timeout is exceeded, you can drop order now"),
+				Keyboard(M("confirm"), M("drop")),
+			))
+		}
 
 	default:
 		s.ChangeState(State_Unavailable)

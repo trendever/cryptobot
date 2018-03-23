@@ -407,21 +407,28 @@ func DropOrder(req proto.DropOrderRequest) (bool, error) {
 		tx.Rollback()
 		return false, errors.New(proto.DBError)
 	}
-	if order.Status != proto.OrderStatus_Accepted && order.Status != proto.OrderStatus_Linked {
+
+	switch order.Status {
+	case proto.OrderStatus_Accepted, proto.OrderStatus_Linked:
+		order.Status = proto.OrderStatus_Dropped
+
+	case proto.OrderStatus_ConfirmationExtended:
+		order.Status = proto.OrderStatus_Unconfirmed
+
+	default:
 		log.Debug("operator %v tried to drop order %v while order had status %v",
 			req.OperatorID, req.OrderID, order.Status)
 		tx.Rollback()
 		return false, errors.New("unexpected status")
 	}
 
-	order.Status = proto.OrderStatus_Dropped
 	err = order.Save(tx)
 	if err != nil {
 		tx.Rollback()
 		return false, errors.New(proto.DBError)
 	}
 	err = tx.Model(&op).Updates(map[string]interface{}{
-		"status":        proto.OperatorStatus_Inactive,
+		"status":        proto.OperatorStatus_Ready,
 		"current_order": 0,
 	}).Error
 	if err != nil {
@@ -542,7 +549,7 @@ func CancelOrder(orderID uint64) (bool, error) {
 		newOrder = true
 	case proto.OrderStatus_Accepted,
 		proto.OrderStatus_Linked, proto.OrderStatus_Payment,
-		proto.OrderStatus_Confirmation:
+		proto.OrderStatus_Confirmation, proto.OrderStatus_ConfirmationExtended:
 	default:
 		tx.Rollback()
 		return false, errors.New("unexpected status")
@@ -627,7 +634,10 @@ func MarkPayed(orderID uint64) (bool, error) {
 		tx.Rollback()
 		return false, errors.New(proto.DBError)
 	}
-	if order.Status != proto.OrderStatus_Payment && order.Status != proto.OrderStatus_Confirmation {
+	switch order.Status {
+	case proto.OrderStatus_Payment, proto.OrderStatus_Confirmation, proto.OrderStatus_ConfirmationExtended:
+
+	default:
 		tx.Rollback()
 		return false, errors.New("unexpected status")
 	}
@@ -657,7 +667,8 @@ func ConfirmPayment(orderID uint64) (bool, error) {
 		tx.Rollback()
 		return false, errors.New(proto.DBError)
 	}
-	if order.Status != proto.OrderStatus_Confirmation {
+	if order.Status != proto.OrderStatus_Confirmation &&
+		order.Status != proto.OrderStatus_ConfirmationExtended {
 		tx.Rollback()
 		return false, errors.New("unexpected status")
 	}
