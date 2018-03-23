@@ -11,6 +11,7 @@ import (
 	"github.com/shopspring/decimal"
 	"lbapi"
 	"strconv"
+	tg "telegram/proto"
 )
 
 func init() {
@@ -533,8 +534,11 @@ func CancelOrder(orderID uint64) (bool, error) {
 		tx.Rollback()
 		return false, errors.New(proto.DBError)
 	}
+	newOrder := false
 	switch order.Status {
-	case proto.OrderStatus_New, proto.OrderStatus_Accepted,
+	case proto.OrderStatus_New:
+		newOrder = true
+	case proto.OrderStatus_Accepted,
 		proto.OrderStatus_Linked, proto.OrderStatus_Payment,
 		proto.OrderStatus_Confirmation:
 	default:
@@ -552,12 +556,37 @@ func CancelOrder(orderID uint64) (bool, error) {
 		}
 
 		err = tx.Model(&op).Updates(map[string]interface{}{
-			"status":        proto.OperatorStatus_Inactive,
-			"current_order": 0,
+			"status": proto.OperatorStatus_Ready,
 		}).Error
 		if err != nil {
 			log.Debug("failed to withdraw order from operator: %v", err)
 			tx.Rollback()
+			return false, errors.New(proto.DBError)
+		}
+	}
+
+	var ids []uint64
+	var chats []int64
+	if newOrder {
+		var ops []Operator
+		err = tx.Set("gorm:query_option", "FOR UPDATE").Find(&ops, "status = ? AND current_order = ?", proto.OperatorStatus_Proposal, order.ID).Error
+		if err != nil {
+			tx.Rollback()
+			log.Errorf("failed to load related operators: %v", err)
+			return false, errors.New(proto.DBError)
+		}
+
+		for _, op := range ops {
+			ids = append(ids, op.ID)
+			chats = append(chats, op.TelegramChat)
+		}
+
+		err = tx.Model(&Operator{}).Where("id in (?)", ids).Updates(map[string]interface{}{
+			"status": proto.OperatorStatus_Ready,
+		}).Error
+		if err != nil {
+			tx.Rollback()
+			fmt.Errorf("failed to withdraw order from operators: %v", err)
 			return false, errors.New(proto.DBError)
 		}
 	}
@@ -573,6 +602,16 @@ func CancelOrder(orderID uint64) (bool, error) {
 	if err != nil {
 		log.Errorf("failed to commit in CancelOrder: %v", err)
 		return false, errors.New(proto.DBError)
+	}
+
+	if newOrder {
+		err = rabbit.Publish("offer_event", "", tg.OfferEvent{
+			Chats: chats,
+			Order: order.Encode(),
+		})
+		if err != nil {
+			log.Errorf("failed to send reject offer event: %v", err)
+		}
 	}
 
 	return true, nil

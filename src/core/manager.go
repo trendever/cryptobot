@@ -232,7 +232,8 @@ func (man *orderManager) onOrderReceive(push orderPush) {
 	}
 
 	var ops []Operator
-	err = tx.Set("gorm:query_option", "FOR UPDATE").Find(&ops, "status = ? AND current_order < ?", proto.OperatorStatus_Ready, push.id).Error
+	err = tx.Set("gorm:query_option", "FOR UPDATE").
+		Find(&ops, "status = ? AND current_order < ?", proto.OperatorStatus_Ready, push.id).Error
 	if err != nil {
 		tx.Rollback()
 		log.Errorf("failed to load list of ready operators: %v", err)
@@ -442,17 +443,19 @@ func (man *orderManager) acceptOrder(accept accept) {
 		tx.Rollback()
 		log.Errorf("failed to save operator: %v", err)
 		accept.reply <- acceptReply{
-			err: errors.New("db error"),
+			err: errors.New(proto.DBError),
 		}
 		return
 	}
 
 	var ops []Operator
-	err = tx.Set("gorm:query_option", "FOR UPDATE").Find(&ops, "current_order = ? AND id != ?", order.ID, op.ID).Error
+	err = tx.Set("gorm:query_option", "FOR UPDATE").
+		Where("status = ? AND current_order = ? AND id != ?", proto.OperatorStatus_Proposal, order.ID, op.ID).
+		Find(&ops).Error
 	if err != nil {
 		tx.Rollback()
 		accept.reply <- acceptReply{
-			err: errors.New("db error"),
+			err: errors.New(proto.DBError),
 		}
 		log.Errorf("failed to load related operators: %v", err)
 		return
@@ -470,7 +473,7 @@ func (man *orderManager) acceptOrder(accept accept) {
 	if err != nil {
 		tx.Rollback()
 		accept.reply <- acceptReply{
-			err: errors.New("db error"),
+			err: errors.New(proto.DBError),
 		}
 		log.Errorf("failed to withdraw order from operators: %v", err)
 		return
@@ -482,7 +485,7 @@ func (man *orderManager) acceptOrder(accept accept) {
 	if err != nil {
 		tx.Rollback()
 		accept.reply <- acceptReply{
-			err: errors.New("db error"),
+			err: errors.New(proto.DBError),
 		}
 		return
 	}
@@ -499,7 +502,7 @@ func (man *orderManager) acceptOrder(accept accept) {
 	if err != nil {
 		log.Errorf("failed to commit: %v", err)
 		accept.reply <- acceptReply{
-			err: errors.New("db error"),
+			err: errors.New(proto.DBError),
 		}
 		return
 	}
@@ -523,7 +526,8 @@ func rejectOrder(orderID uint64) error {
 	}
 
 	var ops []Operator
-	err = tx.Set("gorm:query_option", "FOR UPDATE").Find(&ops, "current_order = ?", order.ID).Error
+	err = tx.Set("gorm:query_option", "FOR UPDATE").
+		Find(&ops, "status = ? AND current_order = ?", proto.OperatorStatus_Proposal, order.ID).Error
 	if err != nil {
 		tx.Rollback()
 		return fmt.Errorf("failed to load related operators: %v", err)
