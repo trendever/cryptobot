@@ -12,6 +12,7 @@ import (
 	"lbapi"
 	"strconv"
 	tg "telegram/proto"
+	"time"
 )
 
 func init() {
@@ -511,6 +512,7 @@ func RequestPayment(orderID uint64) (proto.Order, error) {
 		return proto.Order{}, errors.New(proto.DBError)
 	}
 	order.Status = proto.OrderStatus_Payment
+	order.PaymentRequestedAt = time.Now()
 	err = order.Save(tx)
 	if err != nil {
 		tx.Rollback()
@@ -630,6 +632,7 @@ func MarkPayed(orderID uint64) (bool, error) {
 		return false, errors.New("unexpected status")
 	}
 	order.Status = proto.OrderStatus_Confirmation
+	order.MarkedPayedAt = time.Now()
 	err = order.Save(tx)
 	if err != nil {
 		log.Debug("failed to save order: %v", err)
@@ -687,6 +690,7 @@ func ConfirmPayment(orderID uint64) (bool, error) {
 
 	// @TODO Transfer coins to client from bs buffer
 	order.Status = proto.OrderStatus_Transfer
+	order.ConfirmedAt = time.Now()
 	err = order.Save(tx)
 	if err != nil {
 		log.Errorf("failed to save order: %v", err)
