@@ -1,0 +1,81 @@
+version: "3"
+services:
+  core:
+    image: debian:stretch
+    volumes:
+      - .:/services:rw
+      - /etc/ssl/certs:/etc/ssl/certs:ro
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/ca-certificates/:/etc/ca-certificates/:ro
+    working_dir: /services/
+    depends_on:
+      - db
+    networks:
+      - crypto
+    ports:
+      - 127.0.0.1:8777:8777
+    environment:
+      WEB_ROOT: '/services'
+      GOPATH: '/services/vendor:/services'
+    restart: always      
+    command: sh -c './bin/core migrate && exec ./bin/core start'
+
+  tg:
+    image: debian:stretch
+    volumes:
+      - .:/services:rw
+      - /etc/ssl/certs:/etc/ssl/certs:ro
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/ca-certificates/:/etc/ca-certificates/:ro
+    working_dir: /services/
+    restart: always
+    networks:
+      - crypto
+    command: sh -c 'exec ./bin/telegram start'
+
+  api:
+    image: debian:stretch
+    working_dir: /services/
+    environment:
+      VIRTUAL_HOST: "bot.trusty.fund"
+      LETSENCRYPT_HOST: "bot.trusty.fund"
+      LETSENCRYPT_EMAIL: "root@trusty.fund"
+    volumes:
+      - .:/services:rw
+    networks:
+      - crypto
+      - webproxy
+    restart: always
+    command: ./bin/api start
+
+  db:
+    image: "postgres:9-alpine"
+    environment:
+      POSTGRES_PASSWORD: 1234
+      PGDATA: "/var/lib/postgresql/data/pgdata"
+    volumes:
+      - dbdata:/var/lib/postgresql/data/pgdata:rw
+    restart: always
+    networks:
+      - crypto
+    ports:
+      - 127.0.0.1:5433:5432
+
+  rabbit:
+    image: "rabbitmq:3-management-alpine"
+    volumes:
+      - rabbitdata:/var/lib/rabbitmq:rw
+    restart: always
+    networks:
+      - crypto
+    ports:
+      - 127.0.0.1:5672:5672
+      # managment web interface
+      - 127.0.0.1:8070:15672
+
+networks:
+  crypto:
+
+volumes:
+  dbdata: {}
+  rabbitdata: {}
