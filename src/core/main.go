@@ -29,8 +29,8 @@ var conf struct {
 
 	Messages map[string]string
 
-	LBCheckTick string
-	lbCheckTick time.Duration
+	LBCheckTick      time.Duration
+	OrdersUpdateTick time.Duration
 
 	OperatorFee float64
 	BotFee      float64
@@ -41,6 +41,12 @@ var conf struct {
 	TelegramChanel string
 
 	SentryDSN string
+
+	OrderTimeouts struct {
+		Accept  time.Duration
+		Payment time.Duration
+		Confirm time.Duration
+	}
 }
 
 var (
@@ -62,14 +68,15 @@ func (srv service) Load() {
 	log.Init(conf.Debug, ServiceName, conf.SentryDSN)
 	log.Debug("config:\n%s", log.IndentEncode(conf))
 
-	if conf.LBCheckTick == "" {
-		conf.lbCheckTick = 5 * time.Second
-	} else {
-		var err error
-		conf.lbCheckTick, err = time.ParseDuration(conf.LBCheckTick)
-		if err != nil {
-			log.Fatalf("invalid LBCheckTick provided in config")
-		}
+	if conf.LBCheckTick == 0 {
+		conf.LBCheckTick = 5 * time.Second
+	}
+	if conf.OrdersUpdateTick == 0 {
+		conf.OrdersUpdateTick = 5 * time.Second
+	}
+	t := conf.OrderTimeouts
+	if t.Accept < time.Minute || t.Payment < time.Minute || t.Confirm < time.Minute {
+		log.Fatalf("invalid order timeouts")
 	}
 
 	db.Init(&conf.DB)

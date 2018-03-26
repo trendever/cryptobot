@@ -29,12 +29,24 @@ var SendNotifyRoute = rabbit.Route{
 	},
 }
 
-type SendOfferRequest struct {
-	ChatID int64
-	Order  core.Order
+type OfferEvent struct {
+	Chats []int64
+	Order core.Order
 }
 
-var SendOffer = rabbit.RPC{
-	Name:        "send_offer",
-	HandlerType: (func(SendOfferRequest) (bool, error))(nil),
+var OfferEventRoute = rabbit.Route{
+	{
+		Node: rabbit.Exchange{
+			Name:    "offer_event",
+			Kind:    "fanout",
+			Durable: true,
+		},
+	},
+	{
+		Keys: []string{""},
+		Node: rabbit.Queue{
+			Name:    "offer_event",
+			Durable: true,
+		},
+	},
 }

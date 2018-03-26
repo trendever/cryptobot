@@ -191,21 +191,31 @@ func changeKeyStateMessage(s *Session, msg *telebot.Message) {
 		log.Error(SendMessage(s.Dest(), fmt.Sprintf(M("key belogs to %v"), op.Username), nil))
 
 		if s.Operator.ID != 0 && op.ID != s.Operator.ID {
-			log.Error(SendMessage(s.Dest(), fmt.Sprintf(M("previos account tat was attached to this chat is %v"), s.Operator.Username), nil))
+			log.Error(SendMessage(s.Dest(), fmt.Sprintf(M("previos account attached to this chat was %v"), s.Operator.Username), nil))
 		}
 
 		op, err = SetOperatorKey(proto.SetOperatorKeyRequest{
 			ChatID: s.Operator.TelegramChat,
 			Key:    key,
 		})
-		if err != nil {
+		switch {
+		// Everything went fine, refresh session data now
+		case err == nil:
+			s.Reload()
+			return
+
+		// Somehow this operator is busy with order now
+		case err.Error() == proto.ForbiddenError:
+			log.Error(SendMessage(s.Dest(), M("you are not allowed to change accout rigth now"), nil))
+			// Reload for actual state
+			s.Reload()
+			return
+
+		default:
 			log.Errorf("failed to set lb key for chat %v: %v", s.Operator.TelegramChat, err)
 			s.ChangeState(State_Unavailable)
 			return
 		}
-
-		s.Operator = op
-		s.ChangeState(State_Start)
 	}
 }
 
@@ -344,15 +354,21 @@ func serveOrderStateEnter(s *Session) {
 	case proto.OrderStatus_Linked:
 		log.Error(SendMessage(s.Dest(), fmt.Sprintf(
 			M("lb link: %v\ncontact amount: %v\nrequsites:\n%v"),
-			fmt.Sprintf("https://localbitcoins.com/request/online_sell_buyer/%v", order.LBContractID),
+			fmt.Sprintf("https://localbitcoins.net/request/online_sell_buyer/%v", order.LBContractID),
 			order.LBAmount, order.PaymentRequisites,
 		), Keyboard(M("confirm"), M("drop"))))
 
 	case proto.OrderStatus_Payment:
-		log.Error(SendMessage(s.Dest(), "wait for payment", Keyboard()))
+		log.Error(SendMessage(s.Dest(), "wait for payment", Keyboard("...")))
 
 	case proto.OrderStatus_Confirmation:
 		log.Error(SendMessage(s.Dest(), M("client marked order as payed"), Keyboard(M("confirm"))))
+
+	case proto.OrderStatus_ConfirmationExtended:
+		log.Error(SendMessage(s.Dest(),
+			M("confirmation timeout is exceeded, you can drop order now"),
+			Keyboard(M("confirm"), M("drop")),
+		))
 	}
 }
 
@@ -398,6 +414,16 @@ func serveOrderStateEvent(s *Session, event interface{}) {
 	case proto.OrderStatus_Confirmation:
 		log.Error(SendMessage(s.Dest(), M("client marked order as payed"), Keyboard(M("confirm"))))
 		s.context = order
+
+	case proto.OrderStatus_ConfirmationExtended:
+		log.Error(SendMessage(s.Dest(),
+			M("confirmation timeout is exceeded, you can drop order now"),
+			Keyboard(M("confirm"), M("drop")),
+		))
+		s.context = order
+
+	case proto.OrderStatus_Unconfirmed:
+		s.ChangeState(State_WaitForOrders)
 
 	case proto.OrderStatus_Transfer, proto.OrderStatus_Finished:
 		amount := order.LBAmount.Sub(order.LBFee).Sub(order.OperatorFee)
@@ -446,8 +472,8 @@ func serveOrderStateMessage(s *Session, msg *telebot.Message) {
 			s.ChangeState(State_Unavailable)
 			return
 		}
-		// @TODO send something?
-		s.ChangeState(State_Start)
+		log.Error(SendMessage(s.Dest(), M("order was dropped"), Keyboard("...")))
+		s.ChangeState(State_WaitForOrders)
 		return
 	}
 	switch order.Status {
@@ -459,7 +485,7 @@ func serveOrderStateMessage(s *Session, msg *telebot.Message) {
 				return
 			}
 			s.context = order
-			log.Error(SendMessage(s.Dest(), M("wait for payment"), Keyboard()))
+			log.Error(SendMessage(s.Dest(), M("wait for payment"), Keyboard("...")))
 			return
 		}
 		fallthrough
@@ -475,7 +501,7 @@ func serveOrderStateMessage(s *Session, msg *telebot.Message) {
 			s.context = order
 			log.Error(SendMessage(s.Dest(), fmt.Sprintf(
 				M("lb link: %v\ncontact amount: %v\nrequsites:\n%v"),
-				fmt.Sprintf("https://localbitcoins.com/request/online_sell_buyer/%v", order.LBContractID),
+				fmt.Sprintf("https://localbitcoins.net/request/online_sell_buyer/%v", order.LBContractID),
 				order.LBAmount, order.PaymentRequisites,
 			), Keyboard(M("confirm"), M("drop"))))
 
@@ -488,7 +514,7 @@ func serveOrderStateMessage(s *Session, msg *telebot.Message) {
 		}
 
 	case proto.OrderStatus_Payment:
-		log.Error(SendMessage(s.Dest(), M("wait for payment"), Keyboard()))
+		log.Error(SendMessage(s.Dest(), M("wait for payment"), Keyboard("...")))
 
 	case proto.OrderStatus_Confirmation:
 		if msg.Text == M("confirm") {
@@ -497,10 +523,31 @@ func serveOrderStateMessage(s *Session, msg *telebot.Message) {
 				s.ChangeState(State_Unavailable)
 				return
 			}
-			log.Error(SendMessage(s.Dest(), M("wait for finish of transaction"), Keyboard()))
+			log.Error(SendMessage(s.Dest(), M("wait for finish of transaction"), Keyboard("...")))
 			return
 		}
 		log.Error(SendMessage(s.Dest(), M("client marked order as payed"), Keyboard(M("confirm"))))
+
+	case proto.OrderStatus_ConfirmationExtended:
+		switch msg.Text {
+		case M("confirm"):
+			_, err := ConfirmPayment(order.ID)
+			if err != nil {
+				s.ChangeState(State_Unavailable)
+				return
+			}
+			log.Error(SendMessage(s.Dest(), M("wait for finish of transaction"), Keyboard("...")))
+			return
+
+		// handled above
+		//case "drop":
+
+		default:
+			log.Error(SendMessage(s.Dest(),
+				M("confirmation timeout is exceeded, you can drop order now"),
+				Keyboard(M("confirm"), M("drop")),
+			))
+		}
 
 	default:
 		s.ChangeState(State_Unavailable)

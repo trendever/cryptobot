@@ -13,7 +13,7 @@ import (
 )
 
 func LBTransactionsLoop() {
-	for range time.Tick(conf.lbCheckTick) {
+	for range time.Tick(conf.LBCheckTick) {
 		wallet, err := conf.LBKey.Wallet()
 		if err != nil {
 			log.Error(err)
@@ -83,7 +83,7 @@ func ProcessIncomingTx(event lbapi.Transaction) error {
 		return err
 	}
 	if op.Status == proto.OperatorStatus_Ready {
-		manager.PushOperator(op)
+		manager.PushOperator(op.ID, true)
 	}
 
 	go func() {

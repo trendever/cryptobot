@@ -11,6 +11,8 @@ import (
 	"github.com/shopspring/decimal"
 	"lbapi"
 	"strconv"
+	tg "telegram/proto"
+	"time"
 )
 
 func init() {
@@ -114,9 +116,6 @@ func SetOperatorStatus(req proto.SetOperatorStatusRequest) (bool, error) {
 		return false, errors.New("operator is busy")
 	}
 	op.Status = req.Status
-	if op.Status == proto.OperatorStatus_Proposal {
-		op.CurrentOrder = 0
-	}
 	err = op.Save(tx)
 	if err != nil {
 		log.Errorf("failed to update operator status: %v", err)
@@ -125,7 +124,7 @@ func SetOperatorStatus(req proto.SetOperatorStatusRequest) (bool, error) {
 	}
 
 	if req.Status == proto.OperatorStatus_Ready {
-		manager.PushOperator(op)
+		manager.PushOperator(op.ID, false)
 	}
 
 	err = tx.Commit().Error
@@ -160,16 +159,10 @@ func SetOperatorKey(req proto.SetOperatorKeyRequest) (proto.Operator, error) {
 		}
 
 	case err.Error() == "record not found":
-		op.Username = acc.Username
-		op.Deposit = decimal.Zero
-		op.TelegramChat = req.ChatID
-		op.Status = proto.OperatorStatus_Inactive
-		op.Key = req.Key
-		err = tx.Create(&op).Error
+		err = createAccount(tx, acc.Username, &req)
 		if err != nil {
-			log.Errorf("failed to save operator %v: %v", op.ID, err)
 			tx.Rollback()
-			return proto.Operator{}, errors.New(proto.DBError)
+			return proto.Operator{}, err
 		}
 
 	default:
@@ -185,6 +178,47 @@ func SetOperatorKey(req proto.SetOperatorKeyRequest) (proto.Operator, error) {
 	}
 
 	return op.Encode(), nil
+}
+
+func createAccount(tx *gorm.DB, username string, req *proto.SetOperatorKeyRequest) error {
+	oldOp := Operator{TelegramChat: req.ChatID}
+	err := oldOp.LockLoad(tx)
+	switch {
+	case err == nil:
+		if oldOp.Status == proto.OperatorStatus_Busy {
+			log.Errorf("operator with chat %v(%v) tried to change lb account while was busy with order", req.ChatID, oldOp.Username)
+			return errors.New(proto.ForbiddenError)
+		}
+
+		err := tx.Model(&oldOp).Updates(map[string]interface{}{
+			"telegram_chat": gorm.Expr("NULL"),
+			"status":        proto.OperatorStatus_None,
+		}).Error
+		if err != nil {
+			log.Errorf("failed o detach old account on relink: %v", err)
+			return errors.New(proto.DBError)
+		}
+
+	case err.Error() == "record not found":
+
+	default:
+		log.Errorf("failed to load old operator: %v", err)
+		return errors.New(proto.DBError)
+	}
+
+	op := Operator{
+		Username:     username,
+		Deposit:      decimal.Zero,
+		TelegramChat: req.ChatID,
+		Status:       proto.OperatorStatus_Inactive,
+		Key:          req.Key,
+	}
+	err = tx.Create(&op).Error
+	if err != nil {
+		log.Errorf("failed to save operator %v: %v", op.Username, err)
+		return errors.New(proto.DBError)
+	}
+	return nil
 }
 
 func relinkAccount(tx *gorm.DB, op *Operator, req *proto.SetOperatorKeyRequest) error {
@@ -209,7 +243,7 @@ func relinkAccount(tx *gorm.DB, op *Operator, req *proto.SetOperatorKeyRequest) 
 	case err == nil:
 		if oldOp.Status == proto.OperatorStatus_Busy {
 			log.Errorf("operator with chat %v(%v) tried to change lb account while was busy with order", req.ChatID, oldOp.Username)
-			return errors.New("forbidden")
+			return errors.New(proto.ForbiddenError)
 		}
 
 		err := tx.Model(&oldOp).Updates(map[string]interface{}{
@@ -294,7 +328,7 @@ func CreateOrder(req proto.Order) (proto.Order, error) {
 		return proto.Order{}, errors.New(proto.DBError)
 	}
 
-	manager.PushOrder(order)
+	manager.PushOrder(order.ID)
 
 	return order.Encode(), nil
 }
@@ -347,7 +381,7 @@ func SkipOffer(req proto.SkipOfferRequest) (bool, error) {
 		return false, errors.New(proto.DBError)
 	}
 
-	manager.PushOperator(op)
+	manager.PushOperator(op.ID, false)
 	return true, nil
 }
 
@@ -373,21 +407,28 @@ func DropOrder(req proto.DropOrderRequest) (bool, error) {
 		tx.Rollback()
 		return false, errors.New(proto.DBError)
 	}
-	if order.Status != proto.OrderStatus_Accepted && order.Status != proto.OrderStatus_Linked {
+
+	switch order.Status {
+	case proto.OrderStatus_Accepted, proto.OrderStatus_Linked:
+		order.Status = proto.OrderStatus_Dropped
+
+	case proto.OrderStatus_ConfirmationExtended:
+		order.Status = proto.OrderStatus_Unconfirmed
+
+	default:
 		log.Debug("operator %v tried to drop order %v while order had status %v",
 			req.OperatorID, req.OrderID, order.Status)
 		tx.Rollback()
 		return false, errors.New("unexpected status")
 	}
 
-	order.Status = proto.OrderStatus_Dropped
 	err = order.Save(tx)
 	if err != nil {
 		tx.Rollback()
 		return false, errors.New(proto.DBError)
 	}
 	err = tx.Model(&op).Updates(map[string]interface{}{
-		"status":        proto.OperatorStatus_Inactive,
+		"status":        proto.OperatorStatus_Ready,
 		"current_order": 0,
 	}).Error
 	if err != nil {
@@ -478,6 +519,7 @@ func RequestPayment(orderID uint64) (proto.Order, error) {
 		return proto.Order{}, errors.New(proto.DBError)
 	}
 	order.Status = proto.OrderStatus_Payment
+	order.PaymentRequestedAt = time.Now()
 	err = order.Save(tx)
 	if err != nil {
 		tx.Rollback()
@@ -501,10 +543,13 @@ func CancelOrder(orderID uint64) (bool, error) {
 		tx.Rollback()
 		return false, errors.New(proto.DBError)
 	}
+	newOrder := false
 	switch order.Status {
-	case proto.OrderStatus_New, proto.OrderStatus_Accepted,
+	case proto.OrderStatus_New:
+		newOrder = true
+	case proto.OrderStatus_Accepted,
 		proto.OrderStatus_Linked, proto.OrderStatus_Payment,
-		proto.OrderStatus_Confirmation:
+		proto.OrderStatus_Confirmation, proto.OrderStatus_ConfirmationExtended:
 	default:
 		tx.Rollback()
 		return false, errors.New("unexpected status")
@@ -520,12 +565,37 @@ func CancelOrder(orderID uint64) (bool, error) {
 		}
 
 		err = tx.Model(&op).Updates(map[string]interface{}{
-			"status":        proto.OperatorStatus_Inactive,
-			"current_order": 0,
+			"status": proto.OperatorStatus_Ready,
 		}).Error
 		if err != nil {
 			log.Debug("failed to withdraw order from operator: %v", err)
 			tx.Rollback()
+			return false, errors.New(proto.DBError)
+		}
+	}
+
+	var ids []uint64
+	var chats []int64
+	if newOrder {
+		var ops []Operator
+		err = tx.Set("gorm:query_option", "FOR UPDATE").Find(&ops, "status = ? AND current_order = ?", proto.OperatorStatus_Proposal, order.ID).Error
+		if err != nil {
+			tx.Rollback()
+			log.Errorf("failed to load related operators: %v", err)
+			return false, errors.New(proto.DBError)
+		}
+
+		for _, op := range ops {
+			ids = append(ids, op.ID)
+			chats = append(chats, op.TelegramChat)
+		}
+
+		err = tx.Model(&Operator{}).Where("id in (?)", ids).Updates(map[string]interface{}{
+			"status": proto.OperatorStatus_Ready,
+		}).Error
+		if err != nil {
+			tx.Rollback()
+			fmt.Errorf("failed to withdraw order from operators: %v", err)
 			return false, errors.New(proto.DBError)
 		}
 	}
@@ -543,6 +613,16 @@ func CancelOrder(orderID uint64) (bool, error) {
 		return false, errors.New(proto.DBError)
 	}
 
+	if newOrder {
+		err = rabbit.Publish("offer_event", "", tg.OfferEvent{
+			Chats: chats,
+			Order: order.Encode(),
+		})
+		if err != nil {
+			log.Errorf("failed to send reject offer event: %v", err)
+		}
+	}
+
 	return true, nil
 }
 
@@ -554,11 +634,15 @@ func MarkPayed(orderID uint64) (bool, error) {
 		tx.Rollback()
 		return false, errors.New(proto.DBError)
 	}
-	if order.Status != proto.OrderStatus_Payment && order.Status != proto.OrderStatus_Confirmation {
+	switch order.Status {
+	case proto.OrderStatus_Payment, proto.OrderStatus_Confirmation, proto.OrderStatus_ConfirmationExtended:
+
+	default:
 		tx.Rollback()
 		return false, errors.New("unexpected status")
 	}
 	order.Status = proto.OrderStatus_Confirmation
+	order.MarkedPayedAt = time.Now()
 	err = order.Save(tx)
 	if err != nil {
 		log.Debug("failed to save order: %v", err)
@@ -583,7 +667,8 @@ func ConfirmPayment(orderID uint64) (bool, error) {
 		tx.Rollback()
 		return false, errors.New(proto.DBError)
 	}
-	if order.Status != proto.OrderStatus_Confirmation {
+	if order.Status != proto.OrderStatus_Confirmation &&
+		order.Status != proto.OrderStatus_ConfirmationExtended {
 		tx.Rollback()
 		return false, errors.New("unexpected status")
 	}
@@ -616,6 +701,7 @@ func ConfirmPayment(orderID uint64) (bool, error) {
 
 	// @TODO Transfer coins to client from bs buffer
 	order.Status = proto.OrderStatus_Transfer
+	order.ConfirmedAt = time.Now()
 	err = order.Save(tx)
 	if err != nil {
 		log.Errorf("failed to save order: %v", err)
