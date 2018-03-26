@@ -2,7 +2,7 @@ lbKey:
   public: 0822f83228750e27d4264972fa87e9a4
   secret: 33b369d011d695540cd8b424c9aa4ea62c04ddce7800eb952ebeb822a20ec0cc
 
-telegramChanel: '@tl_crypto_notify'
+telegramChanel: '@trustycryptofx'
 
 debug: true
 #dumpQueries: true

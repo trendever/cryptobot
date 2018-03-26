@@ -1,4 +1,4 @@
-listen: :8093
+listen: :80
 debug: true
 
 rabbit:
