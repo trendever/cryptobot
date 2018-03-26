@@ -52,7 +52,7 @@ func (srv service) Start() {
 	rabbit.Start(&conf.Rabbit)
 	soso.AddMiddleware(TokenMiddleware)
 	SosoObj.HandleRoutes(SosoRoutes)
-	http.Handle("/", sockjs.NewHandler("/", sockjs.DefaultOptions, Receiver))
+	http.Handle("/channel/", sockjs.NewHandler("/channel", sockjs.DefaultOptions, Receiver))
 	http.ListenAndServe(conf.Listen, nil)
 }
 
