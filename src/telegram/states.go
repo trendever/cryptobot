@@ -518,12 +518,12 @@ func serveOrderStateMessage(s *Session, msg *telebot.Message) {
 
 	case proto.OrderStatus_Confirmation:
 		if msg.Text == M("confirm") {
+			log.Error(SendMessage(s.Dest(), M("wait for finish of transaction"), Keyboard("...")))
 			_, err := ConfirmPayment(order.ID)
 			if err != nil {
 				s.ChangeState(State_Unavailable)
 				return
 			}
-			log.Error(SendMessage(s.Dest(), M("wait for finish of transaction"), Keyboard("...")))
 			return
 		}
 		log.Error(SendMessage(s.Dest(), M("client marked order as payed"), Keyboard(M("confirm"))))

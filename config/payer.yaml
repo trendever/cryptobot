@@ -1,0 +1,9 @@
+rabbit:
+    URL: "amqp://guest:guest@rabbit"
+bitshares:
+    brainkey: "pheon dasi costar paler cooing pondman panurgy burton grike sculpt midnoon samara dermis derrick kurung femoral"
+    userid: "1.2.512210"
+    nodes:
+      - 'wss://bitshares.openledger.info/ws'
+      - 'wss://eu.openledger.info/ws'
+      - 'wss://bit.btsabc.org/ws'

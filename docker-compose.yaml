@@ -42,6 +42,14 @@ services:
     ports:
       - 127.0.0.1:8093:8093
 
+  payer:
+    build: ./src/payer
+    volumes:
+      - ./config:/config:rw
+    networks:
+      - crypto
+
+
   db:
     image: "postgres:9-alpine"
     environment:

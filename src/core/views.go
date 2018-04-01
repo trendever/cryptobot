@@ -32,7 +32,10 @@ func init() {
 	rabbit.ServeRPC(proto.CancelOrder, CancelOrder)
 	rabbit.ServeRPC(proto.MarkPayed, MarkPayed)
 	rabbit.ServeRPC(proto.ConfirmPayment, ConfirmPayment)
+	rabbit.DeclareRPC(proto.BitsharesPayment, &ProcessPayment)
 }
+
+var ProcessPayment func(proto.BitsharesPaymentRequest) (proto.BitsharesPaymentResponse, error)
 
 func GetDepositRefillAddress(operatorID uint64) (string, error) {
 	return ReceivingAddress, nil
@@ -698,24 +701,65 @@ func ConfirmPayment(orderID uint64) (bool, error) {
 		tx.Rollback()
 		return false, errors.New(proto.DBError)
 	}
+	
+	return finishOrder(tx, order)
+}
 
-	// @TODO Transfer coins to client from bs buffer
-	order.Status = proto.OrderStatus_Transfer
-	order.ConfirmedAt = time.Now()
-	err = order.Save(tx)
+func finishOrder(tx *gorm.DB, order Order) (bool, error){
+	var telegramStatusMessage string = ""
+
+
+	response, err := ProcessPayment(proto.BitsharesPaymentRequest{
+		Name: order.Destination,
+		Amount: order.OutletAmount(),
+	})
+
 	if err != nil {
-		log.Errorf("failed to save order: %v", err)
-		tx.Rollback()
-		return false, errors.New(proto.DBError)
+		order.Status = proto.OrderStatus_Transfer
+		order.ConfirmedAt = time.Now()
+
+		telegramStatusMessage = "Payment service unavailable, need to transfer manualy !"
+
+		errSave := order.Save(tx)
+
+		if errSave != nil {
+			log.Errorf("failed to save order: %v", errSave)
+			tx.Rollback()
+			return false, errors.New(proto.DBError)
+		}
 	}
 
+	if (response.Success) {
+		order.Status = proto.OrderStatus_Finished
+		order.ConfirmedAt = time.Now()
+
+		err = order.Save(tx)
+		if err != nil {
+			log.Errorf("failed to save order: %v", err)
+			tx.Rollback()
+			return false, errors.New(proto.DBError)
+		}
+	} else {
+		order.Status = proto.OrderStatus_Transfer
+		order.ConfirmedAt = time.Now()
+
+		telegramStatusMessage = fmt.Sprintf("Need manual transfer : %s", response.Message)
+
+		err = order.Save(tx)
+		if err != nil {
+			log.Errorf("failed to save order: %v", err)
+			tx.Rollback()
+			return false, errors.New(proto.DBError)
+		}
+	}
+	
+
 	err = SendTelegramNotify(conf.TelegramChanel, fmt.Sprintf(
-		"order %v reached transfer status\ndestination: %v\noutlet amount: %v",
-		order.ID, order.Destination, order.OutletAmount(),
+		"Order %v reached transfer status\naccount: %v\namount: %v \n%v",
+		order.ID, order.Destination, order.OutletAmount(), telegramStatusMessage, 
 	), true)
 	if err != nil {
 		log.Errorf("failed to send fransfer notify: %v", err)
-		tx.Rollback()
 		return false, errors.New("notify failed")
 	}
 
@@ -724,5 +768,6 @@ func ConfirmPayment(orderID uint64) (bool, error) {
 		log.Errorf("failed to commit in ConfirmPayment: %v", err)
 		return false, errors.New(proto.DBError)
 	}
+
 	return true, nil
 }
