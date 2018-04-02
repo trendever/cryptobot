@@ -149,6 +149,8 @@ func (s *Session) ChangeState(newState State) {
 		}
 		return
 	}
+	log.Debug("session %v(%v) state changed: %v -> %v",
+		s.Operator.TelegramChat, s.Operator.ID, s.State, newState)
 	s.State = newState
 	s.context = nil
 	s.ClearInbox()

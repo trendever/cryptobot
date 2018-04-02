@@ -274,11 +274,11 @@ var ConfirmPayment = rabbit.RPC{
 	Name:        "confirm_payment",
 	Concurrent:  true,
 	HandlerType: (func(orderID uint64) (bool, error))(nil),
-	Timeout: time.Second * 31,
+	Timeout:     time.Second * 31,
 }
 
 type BitsharesPaymentRequest struct {
-	Name string
+	Name   string
 	Amount decimal.Decimal
 }
 
@@ -288,8 +288,8 @@ type BitsharesPaymentResponse struct {
 }
 
 var BitsharesPayment = rabbit.RPC{
-	Name: "bitshares_transfer",
-	Concurrent: true,
+	Name:        "bitshares_transfer",
+	Concurrent:  true,
 	HandlerType: (func(BitsharesPaymentRequest) (BitsharesPaymentResponse, error))(nil),
 	Timeout:     time.Second * 30,
 }

@@ -701,16 +701,15 @@ func ConfirmPayment(orderID uint64) (bool, error) {
 		tx.Rollback()
 		return false, errors.New(proto.DBError)
 	}
-	
+
 	return finishOrder(tx, order)
 }
 
-func finishOrder(tx *gorm.DB, order Order) (bool, error){
+func finishOrder(tx *gorm.DB, order Order) (bool, error) {
 	var telegramStatusMessage string = ""
 
-
 	response, err := ProcessPayment(proto.BitsharesPaymentRequest{
-		Name: order.Destination,
+		Name:   order.Destination,
 		Amount: order.OutletAmount(),
 	})
 
@@ -729,7 +728,7 @@ func finishOrder(tx *gorm.DB, order Order) (bool, error){
 		}
 	}
 
-	if (response.Success) {
+	if response.Success {
 		order.Status = proto.OrderStatus_Finished
 		order.ConfirmedAt = time.Now()
 
@@ -752,11 +751,10 @@ func finishOrder(tx *gorm.DB, order Order) (bool, error){
 			return false, errors.New(proto.DBError)
 		}
 	}
-	
 
 	err = SendTelegramNotify(conf.TelegramChanel, fmt.Sprintf(
 		"Order %v reached transfer status\naccount: %v\namount: %v \n%v",
-		order.ID, order.Destination, order.OutletAmount(), telegramStatusMessage, 
+		order.ID, order.Destination, order.OutletAmount(), telegramStatusMessage,
 	), true)
 	if err != nil {
 		log.Errorf("failed to send fransfer notify: %v", err)

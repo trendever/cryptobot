@@ -12,13 +12,28 @@ import (
 type State int
 
 const (
-	State_Start State = iota
+	State_None State = iota
+	State_Start
 	State_Unavailable
 	State_ChangeKey
 	State_InterruptedAction
 	State_WaitForOrders
 	State_ServeOrder
 )
+
+var stateString = map[State]string{
+	State_None:              "None",
+	State_Start:             "Start",
+	State_Unavailable:       "Unavailable",
+	State_ChangeKey:         "ChangeKey",
+	State_InterruptedAction: "InterruptedAction",
+	State_WaitForOrders:     "WaitForOrders",
+	State_ServeOrder:        "ServeOrder",
+}
+
+func (s State) String() string {
+	return stateString[s]
+}
 
 // Set of handlers for state
 type StateActions struct {
