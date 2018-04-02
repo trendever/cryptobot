@@ -280,6 +280,21 @@ func waitForOrdersStateMessage(s *Session, msg *telebot.Message) {
 			log.Error(SendMessage(s.Dest(), M(err.Error()), Keyboard(M("cancel"))))
 			return
 		}
+	default:
+		if s.context != nil {
+			order, ok := s.context.(proto.Order)
+			if !ok {
+				log.Errorf("unexpected context type for state %v in session %v", s.State, s.Operator.TelegramChat)
+				s.ChangeState(State_Unavailable)
+				return
+			}
+			log.Error(SendMessage(
+				s.Dest(),
+				fmt.Sprintf(M("order %v from %v for an amount of %v %v"), order.ID, order.ClientName, order.FiatAmount, order.Currency),
+				Keyboard(M("accept"), M("skip")),
+			))
+			return
+		}
 	}
 
 	log.Error(SendMessage(s.Dest(), M("wait for orders"), Keyboard(M("cancel"))))
