@@ -50,6 +50,13 @@ services:
     restart: always
     command: ./bin/api start
 
+  payer:
+    build: ./src/payer
+    volumes:
+      - ./config:/config:rw
+    networks:
+      - crypto
+
   db:
     image: "postgres:9-alpine"
     environment:
