@@ -56,7 +56,7 @@ const initPayer = (config) => {
       const result = await transaction.broadcast();
       return { success: true }
     } catch (error) {
-      return { success: false, error: error.message }
+      return { success: false, message: error.message }
     }
   }
 }
