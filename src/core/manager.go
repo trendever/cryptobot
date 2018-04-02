@@ -310,9 +310,9 @@ func (man *orderManager) tickUpdate() {
 	touts := conf.OrderTimeouts
 
 	err := db.New().
-		Or("status = ? and created_at < ?", proto.OrderStatus_New, now.Truncate(touts.Accept)).
-		Or("status = ? and payment_requested_at < ?", proto.OrderStatus_Payment, now.Truncate(touts.Payment)).
-		Or("status = ? and marked_payed_at < ?", proto.OrderStatus_Confirmation, now.Truncate(touts.Confirm)).
+		Or("status = ? and created_at < ?", proto.OrderStatus_New, now.Add(-touts.Accept)).
+		Or("status = ? and payment_requested_at < ?", proto.OrderStatus_Payment, now.Add(-touts.Payment)).
+		Or("status = ? and marked_payed_at < ?", proto.OrderStatus_Confirmation, now.Add(-touts.Confirm)).
 		Find(&orders).Error
 
 	if err != nil {
