@@ -54,6 +54,7 @@ services:
     build: ./src/payer
     volumes:
       - ./config:/config:rw
+    restart: always
     networks:
       - crypto
 

@@ -58,3 +58,5 @@ pids
 *.exvim*
 
 .vscode
+
+src/payer/node_modules
