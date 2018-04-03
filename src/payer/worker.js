@@ -47,7 +47,7 @@ const initPayer = (config) => {
 
     const precisedAmount = parseFloat(amount) * (10 ** 8)
 
-    console.log("Transfer ", amount, ' to ', username);
+    console.log("\nTransfer ", amount, precisedAmount, ' to ', username);
 
     const toAccount = await Apis.instance().db_api().exec('get_account_by_name', [username]);
     const transaction = await getTransaction(precisedAmount, toAccount.id, config.bitshares.userid, privateKey)
@@ -66,9 +66,14 @@ const initRabbit = async (url, callback) => {
     const connection = await rabbit.connect(url);
     const channel = await connection.createChannel();
     const queueName = '__rpc__bitshares_transfer';
-    await channel.assertQueue(queueName, {durable: false, autoDelete: true});
-    channel.prefetch(1);
+    
+    channel.assertExchange(queueName, 'fanout', {durable: false, autoDelete: true});
+
+    channel.assertQueue(queueName, { durable: false, autoDelete: true });
+      
+    const res =  await channel.bindQueue(queueName, queueName, '');
     console.log('Worker Up - Awaiting RPC requests');
+
     channel.consume(queueName, async (msg) => {
       const payload = JSON.parse(msg.content.toString());
 
