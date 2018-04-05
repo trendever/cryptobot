@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/tucnak/telebot"
 	"lbapi"
+	"strconv"
 )
 
 type State int
@@ -32,12 +33,18 @@ var stateString = map[State]string{
 }
 
 func (s State) String() string {
-	return stateString[s]
+	str, ok := stateString[s]
+	if ok {
+		return str
+	}
+	return strconv.FormatInt(int64(s), 10)
 }
+
+type EnterHandler func(s *Session, loaded bool)
 
 // Set of handlers for state
 type StateActions struct {
-	Enter func(s *Session)
+	Enter EnterHandler
 	// Every state should have message handler, all other handlers are optional
 	Message MessageHandler
 	Event   EventHandler
@@ -88,7 +95,7 @@ var statesInit = map[State]StateActions{
 	},
 }
 
-func startStateEnter(s *Session) {
+func startStateEnter(s *Session, loaded bool) {
 	if s.Operator.ID != 0 {
 		status := proto.OperatorStatus_None
 		if s.Operator.HasValidKey {
@@ -100,7 +107,9 @@ func startStateEnter(s *Session) {
 			return
 		}
 	}
-	log.Error(SendMessage(s.Dest(), M("start"), startKeyboard(s)))
+	if !loaded {
+		log.Error(SendMessage(s.Dest(), M("start"), startKeyboard(s)))
+	}
 }
 
 func startStateMessage(s *Session, msg *telebot.Message) {
@@ -139,7 +148,10 @@ func startKeyboard(s *Session) *telebot.SendOptions {
 	return Keyboard(keys...)
 }
 
-func unavailableStateEnter(s *Session) {
+func unavailableStateEnter(s *Session, loaded bool) {
+	if loaded {
+		return
+	}
 	log.Error(SendMessage(s.Dest(), fmt.Sprintf(M("service unavailable")), Keyboard(
 		M("reload"),
 	)))
@@ -157,7 +169,7 @@ func unavailableStateMessage(s *Session, msg *telebot.Message) {
 	reloadHandler(s, msg)
 }
 
-func changeKeyStateEnter(s *Session) {
+func changeKeyStateEnter(s *Session, loaded bool) {
 	err := s.SetOperatorStatus(proto.OperatorStatus_Utility)
 	if err != nil {
 		s.ChangeState(State_Unavailable)
@@ -234,13 +246,26 @@ func changeKeyStateMessage(s *Session, msg *telebot.Message) {
 	}
 }
 
-func waitForOrdersStateEnter(s *Session) {
-	err := s.SetOperatorStatus(proto.OperatorStatus_Ready)
-	if err != nil {
-		s.ChangeState(State_Unavailable)
-		return
+func waitForOrdersStateEnter(s *Session, loaded bool) {
+	switch {
+	case !loaded:
+		err := s.SetOperatorStatus(proto.OperatorStatus_Ready)
+		if err != nil {
+			s.ChangeState(State_Unavailable)
+			return
+		}
+		log.Error(SendMessage(s.Dest(), M("wait for orders"), Keyboard(M("cancel"))))
+
+	case s.Operator.Status == proto.OperatorStatus_Proposal:
+		order, err := GetOrder(s.Operator.CurrentOrder)
+		if err != nil {
+			log.Errorf("failed to load order %v: %v", s.Operator.CurrentOrder, err)
+		}
+		s.context = order
+
+	default:
+		// nothing
 	}
-	log.Error(SendMessage(s.Dest(), M("wait for orders"), Keyboard(M("cancel"))))
 }
 
 func waitForOrdersStateMessage(s *Session, msg *telebot.Message) {
@@ -366,7 +391,7 @@ func waitForOrdersStateEvent(s *Session, event interface{}) {
 	}
 }
 
-func serveOrderStateEnter(s *Session) {
+func serveOrderStateEnter(s *Session, loaded bool) {
 	order, err := GetOrder(s.Operator.CurrentOrder)
 	if err != nil {
 		log.Errorf("failed to load order %v: %v", s.Operator.CurrentOrder, err)
@@ -375,6 +400,10 @@ func serveOrderStateEnter(s *Session) {
 	}
 
 	s.context = order
+
+	if loaded {
+		return
+	}
 
 	switch order.Status {
 	case proto.OrderStatus_Accepted:
@@ -490,7 +519,6 @@ func serveOrderStateMessage(s *Session, msg *telebot.Message) {
 		s.ChangeState(State_Unavailable)
 		return
 	}
-	log.Debug("order: %+v", order)
 
 	if msg.Text == M("drop") {
 		_, err := DropOrder(proto.DropOrderRequest{

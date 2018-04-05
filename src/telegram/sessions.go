@@ -89,23 +89,16 @@ func (s *Session) Reload() error {
 func (s *Session) StateFromOpStatus() {
 	switch s.Operator.Status {
 	case proto.OperatorStatus_None, proto.OperatorStatus_Inactive:
-		s.ChangeState(State_Start)
-	case proto.OperatorStatus_Ready:
-		s.ChangeState(State_WaitForOrders)
-	case proto.OperatorStatus_Proposal:
-		s.State = State_WaitForOrders
-		order, err := GetOrder(s.Operator.CurrentOrder)
-		if err != nil {
-			log.Errorf("failed to load order %v: %v", s.Operator.CurrentOrder, err)
-		}
-		s.context = order
+		s.changeState(State_Start, true)
+	case proto.OperatorStatus_Ready, proto.OperatorStatus_Proposal:
+		s.changeState(State_WaitForOrders, true)
 	case proto.OperatorStatus_Busy:
-		s.ChangeState(State_ServeOrder)
+		s.changeState(State_ServeOrder, true)
 	case proto.OperatorStatus_Utility:
-		s.ChangeState(State_InterruptedAction)
+		s.changeState(State_InterruptedAction, true)
 	default:
 		log.Errorf("unknown operator status %v in StateFromStatus", s.Operator.Status)
-		s.ChangeState(State_Start)
+		s.changeState(State_Start, true)
 	}
 }
 
@@ -132,6 +125,10 @@ func (s *Session) Stop() {
 }
 
 func (s *Session) ChangeState(newState State) {
+	s.changeState(newState, false)
+}
+
+func (s *Session) changeState(newState State, loaded bool) {
 	if s.State == newState {
 		return
 	}
@@ -145,17 +142,25 @@ func (s *Session) ChangeState(newState State) {
 		log.Error(SendMessage(s.Dest(), M("internal error"), nil))
 		err := s.Reload()
 		if err != nil {
-			s.ChangeState(State_Unavailable)
+			if newState == State_Unavailable {
+				log.Fatalf("Unavailable state is not defined")
+			}
+			s.changeState(State_Unavailable, true)
 		}
 		return
 	}
-	log.Debug("session %v(%v) state changed: %v -> %v",
-		s.Operator.TelegramChat, s.Operator.ID, s.State, newState)
+	if loaded {
+		log.Debug("session %v(%v) loaded with state %v",
+			s.Operator.TelegramChat, s.Operator.ID, newState)
+	} else {
+		log.Debug("session %v(%v) state changed: %v -> %v",
+			s.Operator.TelegramChat, s.Operator.ID, s.State, newState)
+	}
 	s.State = newState
 	s.context = nil
 	s.ClearInbox()
 	if actions.Enter != nil {
-		actions.Enter(s)
+		actions.Enter(s, loaded)
 	}
 }
 
