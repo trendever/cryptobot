@@ -4,6 +4,7 @@ import (
 	"common/rabbit"
 	"github.com/shopspring/decimal"
 	"lbapi"
+	"strconv"
 	"time"
 )
 
@@ -41,7 +42,11 @@ var OperatorStatusStrings = map[OperatorStatus]string{
 }
 
 func (s OperatorStatus) String() string {
-	return OperatorStatusStrings[s]
+	str, ok := OperatorStatusStrings[s]
+	if ok {
+		return str
+	}
+	return strconv.FormatInt(int64(s), 10)
 }
 
 type Operator struct {
@@ -150,7 +155,11 @@ var OrderStatusStrings = map[OrderStatus]string{
 }
 
 func (s OrderStatus) String() string {
-	return OrderStatusStrings[s]
+	str, ok := OrderStatusStrings[s]
+	if ok {
+		return str
+	}
+	return strconv.FormatInt(int64(s), 10)
 }
 
 type Order struct {
