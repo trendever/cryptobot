@@ -122,6 +122,10 @@ func startStateMessage(s *Session, msg *telebot.Message) {
 		s.ChangeState(State_ChangeKey)
 		return
 
+	case M("CREATE ACCOUNT"):
+		s.ChangeState(State_ChangeKey)
+		return
+
 	case M("HELP"):
 		helpHandler(s, msg)
 		return
@@ -148,12 +152,15 @@ func startKeyboard(s *Session) *telebot.SendOptions {
 			keys,
 			M("DEPOSIT"),
 			M("START SERVICE"),
+			M("CHANGE ACCOUNT"),
+		)
+	} else {
+		keys = append(
+			keys,
+			M("CREATE ACCOUNT"),
 		)
 	}
-	keys = append(
-		keys,
-		M("CHANGE ACCOUNT"),
-	)
+	
 	return Keyboard(keys...)
 }
 
