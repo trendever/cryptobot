@@ -63,7 +63,7 @@ func makeSessionWithOperator(op proto.Operator) *Session {
 	}
 	global.waitGroup.Add(1)
 	go ses.loop()
-	ses.StateFromOpStatus()
+	ses.StateFromOpStatus(true)
 	return ses
 }
 
@@ -82,23 +82,23 @@ func (s *Session) Reload() error {
 		return err
 	}
 	s.Operator = op
-	s.StateFromOpStatus()
+	s.StateFromOpStatus(false)
 	return nil
 }
 
-func (s *Session) StateFromOpStatus() {
+func (s *Session) StateFromOpStatus(loaded bool) {
 	switch s.Operator.Status {
 	case proto.OperatorStatus_None, proto.OperatorStatus_Inactive:
-		s.changeState(State_Start, true)
+		s.changeState(State_Start, loaded)
 	case proto.OperatorStatus_Ready, proto.OperatorStatus_Proposal:
-		s.changeState(State_WaitForOrders, true)
+		s.changeState(State_WaitForOrders, loaded)
 	case proto.OperatorStatus_Busy:
-		s.changeState(State_ServeOrder, true)
+		s.changeState(State_ServeOrder, loaded)
 	case proto.OperatorStatus_Utility:
-		s.changeState(State_InterruptedAction, true)
+		s.changeState(State_InterruptedAction, loaded)
 	default:
 		log.Errorf("unknown operator status %v in StateFromStatus", s.Operator.Status)
-		s.changeState(State_Start, true)
+		s.changeState(State_Start, loaded)
 	}
 }
 
