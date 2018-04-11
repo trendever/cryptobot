@@ -199,6 +199,10 @@ func changeKeyStateMessage(s *Session, msg *telebot.Message) {
 		s.ChangeState(State_Start)
 		return
 	}
+	if msg.Text == M("DONE") {
+		s.ChangeState(State_Start)
+		return
+	}
 	if s.context == nil {
 		key := lbapi.Key{
 			Public: msg.Text,
@@ -231,7 +235,7 @@ func changeKeyStateMessage(s *Session, msg *telebot.Message) {
 			return
 		}
 
-		log.Error(SendMessage(s.Dest(), fmt.Sprintf(M("key belogs to %v"), op.Username), nil))
+		log.Error(SendMessage(s.Dest(), fmt.Sprintf(M("key belogs to %v"), op.Username), Keyboard(M("DONE"))))
 
 		if s.Operator.ID != 0 && op.ID != s.Operator.ID {
 			log.Error(SendMessage(s.Dest(), fmt.Sprintf(M("previos account attached to this chat was %v"), s.Operator.Username), nil))
