@@ -6,3 +6,96 @@ rabbit:
 
 messages:
     greetings: "hi"
+    start: >
+        Welcome! My name is @CryptoFXbot. 
+        I was created for money transfer operators, who want to help other people to convert fiat currencies to cryptos and earn 0.5% commission for every transaction. 
+        
+        
+        Please follow the instructions below:
+
+
+        1) create account on localbitcoins.net
+
+
+        2) go to https://localbitcoins.net/accounts/two_factor/ set up two-factor authentication (2FA).
+
+
+        3) go to https://localbitcoins.net/accounts/api/, then 
+
+        a - click New HMAC authentication, 
+
+        b - enter 2FA code, 
+
+        c - enter name "Main", 
+
+        d - select permission "read"
+
+        e - click "Create"
+
+
+        After completing all three steps above - push DONE button below
+    start authed: >
+        No you can start receiving orders, please ensure that u have visited DEPOSIT page
+
+    input public key: >
+        Now please provide your Localbitcoins API Key code.
+
+
+        1) go to https://localbitcoins.net/accounts/api/
+
+        2) click "Main" under HMAC authentications
+
+        3) copy Key code 
+
+        4) send it to me here
+    input secret key: >
+        On the same screen as above (HMAC authentications) please:
+
+
+        1) copy Secret code 
+
+        2) send it to me here
+    key belogs to %v: >
+        Congratulations, %v, you are now a registered money trasnfer operator at CryptoFXbot.
+
+    wait for orders: Your account is active. Wainting for orders.
+
+    stop: STOP SERVICE
+
+    order finished: >
+        Hooray! Order #%v is finished. 
+
+
+        You earned %v BTC
+
+
+        Your CryptoFXbot deposit decreased by %v BTC and your personal Localbitcoins deposit increased by %v BTC
+
+    order payed: >
+        Client on order #%v completed the payment. 
+
+
+        Please go to the transaction screen on Localbitcoins and also mark payment there as completed.
+
+        After you receive BTC on Localbitcoins, please push the CONFIRM button below.
+
+
+        IMPORTANT: don’t push CONFIRM button until you receive payment on Localbitcoins. Cancel the order if it takes too long.
+
+        CANCEL Button will apper on payment timeout (15 minutes) 
+
+    confirm: CONFIRM
+    drop: CANCEL
+
+    new order: >
+        Attention, new pending order #%v from %v for %v %v using %v payment method. 
+
+
+        Be the first to ACCEPT it
+
+
+    create lb: >
+        Please go to localbitcoins and create new order for %v %v using %v payment method.
+
+
+        Then please get the card number and send it here

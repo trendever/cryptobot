@@ -49,8 +49,12 @@ func depositHandler(s *Session, _ *telebot.Message) {
 	log.Error(SendMessage(
 		s.Dest(),
 		fmt.Sprintf(
-			"current deposit: %v\n"+
-				"for replenishment send localbitcoin trasfer to address %v with comment '%v%v'",
+			"This is required to secure client's deposits, and you will be able to withdraw it anytime with commission you earned.\n"+
+				"Deposit size is the maximum size of order you can serve.\n\n"+
+				"Your deposit with CryptoFXbot is %v\n"+
+				"Deposit size is the maximum size of order you can serve.\n\n"+
+				"To increase deposit, please send BTC to %v with comment %v%v \n\n"+
+				"IMPORTANT: Don't forget the comment when sending BTC.",
 			op.Deposit, addr, proto.DepositTransactionPrefix, op.ID),
 		nil),
 	)

@@ -108,43 +108,52 @@ func startStateEnter(s *Session, loaded bool) {
 		}
 	}
 	if !loaded {
-		log.Error(SendMessage(s.Dest(), M("start"), startKeyboard(s)))
+		if s.Operator.HasValidKey {
+			log.Error(SendMessage(s.Dest(), M("start authed"), startKeyboard(s)))
+		} else {
+			log.Error(SendMessage(s.Dest(), M("start"), startKeyboard(s)))
+		}
 	}
 }
 
 func startStateMessage(s *Session, msg *telebot.Message) {
 	switch msg.Text {
-	case M("set key"):
+	case M("CHANGE ACCOUNT"):
 		s.ChangeState(State_ChangeKey)
 		return
 
-	case M("help"):
+	case M("HELP"):
 		helpHandler(s, msg)
 		return
 
-	case M("start serve"):
+	case M("START SERVICE"):
 		s.ChangeState(State_WaitForOrders)
 		return
 
-	case M("show deposit"):
+	case M("DEPOSIT"):
 		depositHandler(s, msg)
 		return
 	}
-	log.Error(SendMessage(s.Dest(), M("start"), startKeyboard(s)))
+	if s.Operator.HasValidKey {
+		log.Error(SendMessage(s.Dest(), M("start authed"), startKeyboard(s)))
+	} else {
+		log.Error(SendMessage(s.Dest(), M("start"), startKeyboard(s)))
+	}
 }
 
 func startKeyboard(s *Session) *telebot.SendOptions {
-	keys := []string{
-		M("set key"),
-		M("help"),
-	}
+	keys := []string{}
 	if s.Operator.HasValidKey {
 		keys = append(
 			keys,
-			M("start serve"),
-			M("show deposit"),
+			M("DEPOSIT"),
+			M("START SERVICE"),
 		)
 	}
+	keys = append(
+		keys,
+		M("CHANGE ACCOUNT"),
+	)
 	return Keyboard(keys...)
 }
 
@@ -254,7 +263,7 @@ func waitForOrdersStateEnter(s *Session, loaded bool) {
 			s.ChangeState(State_Unavailable)
 			return
 		}
-		log.Error(SendMessage(s.Dest(), M("wait for orders"), Keyboard(M("cancel"))))
+		log.Error(SendMessage(s.Dest(), M("wait for orders"), Keyboard(M("stop"))))
 
 	case s.Operator.Status == proto.OperatorStatus_Proposal:
 		order, err := GetOrder(s.Operator.CurrentOrder)
@@ -271,6 +280,9 @@ func waitForOrdersStateEnter(s *Session, loaded bool) {
 func waitForOrdersStateMessage(s *Session, msg *telebot.Message) {
 	switch msg.Text {
 	case M("cancel"):
+		s.ChangeState(State_Start)
+		return
+	case M("stop"):
 		s.ChangeState(State_Start)
 		return
 	case M("accept"):
@@ -322,7 +334,7 @@ func waitForOrdersStateMessage(s *Session, msg *telebot.Message) {
 		}
 	}
 
-	log.Error(SendMessage(s.Dest(), M("wait for orders"), Keyboard(M("cancel"))))
+	log.Error(SendMessage(s.Dest(), M("wait for orders"), Keyboard(M("stop"))))
 }
 
 func waitForOrdersStateEvent(s *Session, event interface{}) {
@@ -335,7 +347,7 @@ func waitForOrdersStateEvent(s *Session, event interface{}) {
 	case proto.OrderStatus_New:
 		log.Error(SendMessage(
 			s.Dest(),
-			fmt.Sprintf(M("new order %v from %v for an amount of %v %v"), order.ID, order.ClientName, order.FiatAmount, order.Currency),
+			fmt.Sprintf(M("new order"), order.ID, order.ClientName, order.FiatAmount, order.Currency, order.PaymentMethod),
 			Keyboard(M("accept"), M("skip")),
 		))
 		s.context = order
@@ -368,7 +380,7 @@ func waitForOrdersStateEvent(s *Session, event interface{}) {
 		}
 		log.Error(SendMessage(
 			s.Dest(),
-			fmt.Sprintf(M("order %v was canceled by client"), order.ID),
+			fmt.Sprintf(M("Sorry! Client canceled order #%v"), order.ID),
 			Keyboard(M("cancel")),
 		))
 		s.context = nil
@@ -408,7 +420,7 @@ func serveOrderStateEnter(s *Session, loaded bool) {
 	switch order.Status {
 	case proto.OrderStatus_Accepted:
 		// @TODO (re-)send order info?
-		log.Error(SendMessage(s.Dest(), M("create lb contact and input requisites here"), Keyboard(M("drop"))))
+		log.Error(SendMessage(s.Dest(), fmt.Sprintf(M("create lb"), order.FiatAmount, order.Currency, order.PaymentMethod), Keyboard(M("drop"))))
 
 	case proto.OrderStatus_Linked:
 		log.Error(SendMessage(s.Dest(), fmt.Sprintf(
@@ -421,7 +433,7 @@ func serveOrderStateEnter(s *Session, loaded bool) {
 		log.Error(SendMessage(s.Dest(), "wait for payment", Keyboard("...")))
 
 	case proto.OrderStatus_Confirmation:
-		log.Error(SendMessage(s.Dest(), M("client marked order as payed"), Keyboard(M("confirm"))))
+		log.Error(SendMessage(s.Dest(), fmt.Sprintf(M("order payed"), order.ID), Keyboard(M("confirm"))))
 
 	case proto.OrderStatus_ConfirmationExtended:
 		log.Error(SendMessage(s.Dest(),
@@ -453,7 +465,7 @@ func serveOrderStateEvent(s *Session, event interface{}) {
 	case proto.OrderStatus_Canceled:
 		log.Error(SendMessage(
 			s.Dest(),
-			fmt.Sprintf(M("order %v was canceled by client"), order.ID),
+			fmt.Sprintf(M("Sorry! Client canceled order #%v"), order.ID),
 			Keyboard(M("cancel")),
 		))
 		s.ChangeState(State_WaitForOrders)
@@ -471,7 +483,7 @@ func serveOrderStateEvent(s *Session, event interface{}) {
 		s.context = order
 
 	case proto.OrderStatus_Confirmation:
-		log.Error(SendMessage(s.Dest(), M("client marked order as payed"), Keyboard(M("confirm"))))
+		log.Error(SendMessage(s.Dest(), fmt.Sprintf(M("order payed"), order.ID), Keyboard(M("confirm"))))
 		s.context = order
 
 	case proto.OrderStatus_ConfirmationExtended:
@@ -488,9 +500,7 @@ func serveOrderStateEvent(s *Session, event interface{}) {
 		amount := order.LBAmount.Sub(order.LBFee).Sub(order.OperatorFee)
 		log.Error(SendMessage(
 			s.Dest(),
-			M("order is finished")+"\n"+
-				M(fmt.Sprintf("%v BTC was writed-off from you deposit", amount))+"\n"+
-				M(fmt.Sprintf("your fee was %v", order.OperatorFee)),
+			fmt.Sprintf(M("order finished"), order.ID, order.OperatorFee, amount, order.LBAmount),
 			Keyboard(M("confirm")),
 		))
 		s.ChangeState(State_WaitForOrders)
@@ -584,7 +594,7 @@ func serveOrderStateMessage(s *Session, msg *telebot.Message) {
 			}
 			return
 		}
-		log.Error(SendMessage(s.Dest(), M("client marked order as payed"), Keyboard(M("confirm"))))
+		log.Error(SendMessage(s.Dest(), fmt.Sprintf(M("order payed"), order.ID), Keyboard(M("confirm"))))
 
 	case proto.OrderStatus_ConfirmationExtended:
 		switch msg.Text {
