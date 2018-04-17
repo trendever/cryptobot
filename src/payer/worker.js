@@ -45,7 +45,7 @@ const initPayer = (config) => {
       return { success: false, error: 'cant connect to any node'};
     }
 
-    const precisedAmount = parseFloat(amount).toFixed(8);
+    const precisedAmount = parseFloat(amount).toFixed(8) * (10 ** 8);
 
     console.log("\nTransfer ", amount, precisedAmount, ' to ', username);
 
